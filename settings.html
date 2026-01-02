@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Settings - RoutingA Helper</title>
+  <link rel="stylesheet" href="settings.css">
+  <link rel="icon" href="icons/favicon.svg">
+</head>
+<body>
+  <h3>Settings & Auth</h3>
+  <label class="muted">Server URL</label>
+  <input id="serverUrl" placeholder="http://192.168.1.1:2017" />
+  <div id="authInputs">
+    <label class="muted">Username / Password</label>
+    <div class="row">
+      <input id="username" class="small" placeholder="User" />
+      <input id="password" class="small" placeholder="Pass" type="password" />
+    </div>
+    <button id="btnLogin">Login</button>
+  </div>
+  <div id="loggedIn" class="hidden">
+    <div class="muted">Logged as <span id="loggedName"></span></div>
+    <button id="btnLogout">Logout</button>
+  </div>
+  <div id="status" class="muted"></div>
+  <hr />
+  <button id="btnBack">Back</button>
+  <script src="settings.js"></script>
+</body>
+</html>

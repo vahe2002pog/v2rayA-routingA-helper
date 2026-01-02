@@ -1,0 +1,12 @@
+@font-face { font-family: InterLocal; src: local('Inter'), local('Inter-Regular'); }
+body{font-family: InterLocal, Arial, Helvetica, sans-serif; width:320px; padding:12px; background:#fff}
+input, button{width:100%; box-sizing:border-box; margin:6px 0; padding:8px; border-radius:4px; border:1px solid #e6e6e6}
+.row{display:flex; gap:8px}
+.small{width:48%}
+.muted{color:#666; font-size:12px}
+.hidden{display:none}
+
+/* Small adjustments to match main GUI */
+button{background:#f6f8fa; cursor:pointer}
+button:hover{filter:brightness(0.98)}
+label{font-size:13px}

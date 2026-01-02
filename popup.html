@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>RoutingA Helper</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="icon" href="icons/favicon.svg">
+</head>
+<body>
+  <div class="header-container">
+    <h3 class="title">RoutingA Helper</h3>
+    <div class="header-buttons">
+      <button id="proxyState" class="header-btn" title="Proxy state">Loading...</button>
+      <button id="headerRefresh" class="header-btn" title="Refresh"><img class="icon" src="icons/refresh.svg" alt="refresh"></button>
+      <button id="openPanel" class="header-btn" title="Open panel"><img class="icon" src="icons/open-in-new.svg" alt="open"></button>
+      <button id="openSettings" class="header-settings-btn" title="Settings"><img class="icon" src="icons/cog.svg" alt="settings"></button>
+    </div>
+  </div>
+  <div id="popupRules">
+    <div style="margin:6px 0; display:flex; align-items:center; justify-content:space-between"><div class="muted">Current host: <span id="currentHost">-</span></div></div>
+  <textarea id="rulesArea" rows="5" placeholder="site-related rules will appear here"></textarea>
+  
+  <hr />
+  <div class="row">
+      <button id="addDomain">Add current tab</button>
+    </div>
+    <button id="saveRules" class="save" disabled>Save</button>
+  <div id="status" class="muted"></div>
+  </div>
+  <script src="rules.js"></script>
+  <script src="popup_main.js"></script>
+</body>
+ 

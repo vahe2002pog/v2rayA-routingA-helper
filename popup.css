@@ -1,0 +1,35 @@
+/* Styles extracted from popup.html (based on GUI theme) */
+@font-face { font-family: InterLocal; src: local('Inter'), local('Inter-Regular'); }
+body{font-family: InterLocal, Arial, Helvetica, sans-serif; width:320px; padding:12px; background:#fff}
+button{width:100%; padding:8px 10px; margin:6px 0; border-radius:4px; border:none; cursor:pointer; font-size:13px; transition:background .12s, transform .06s}
+button:active{transform:translateY(1px)}
+/* header buttons unified size */
+.header-btn{width:40px; height:34px; padding:0; display:flex; align-items:center; justify-content:center}
+#proxyState{min-width:56px; color:#fff}
+/* default neutral button */
+.btn-neutral{background:#f2f2f2; color:#333}
+/* Colors from GUI buefy.scss */
+.state-working{background:#506da4; color:#fff}
+.state-working:hover{background:#40557f}
+.state-ready{background:#dc8e47; color:#fff}
+.state-ready:hover{background:#b86f2e}
+.state-starting{background:#4497a5; color:#fff}
+.state-starting:hover{background:#347b86}
+/* small hover for general buttons */
+button:hover{filter:brightness(0.97)}
+.muted{color:#666; font-size:12px}
+textarea{font-family: InterLocal, Arial, Helvetica, sans-serif; font-size:13px}
+
+/* Layout helpers moved from popup.html */
+.header-container{display:flex; align-items:center; justify-content:space-between}
+.title{margin:0; font-weight:600}
+.header-buttons{display:flex; gap:6px; align-items:center}
+.header-settings-btn{width:34px; height:34px; padding:0; display:flex; align-items:center; justify-content:center}
+.save{padding:6px}
+textarea{width:100%; box-sizing:border-box}
+
+/* icon sizing inside header buttons */
+.icon{width:18px; height:18px; display:block}
+.header-btn .icon{width:20px; height:20px}
+.header-settings-btn .icon{width:18px; height:18px}
+
