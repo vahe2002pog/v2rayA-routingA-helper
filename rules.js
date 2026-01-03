@@ -56,8 +56,8 @@ async function refreshRules(){
     window.__originalBlockExists = (blockLines.length > 0)
     const taCur = document.getElementById('rulesAreaCurrent')
     if(taCur) taCur.value = combined.join('\n')
-    // update visual diff for current
-    try{ updateDiff('current') }catch(e){}
+    // update visual diff for the active tab (current or global)
+    try{ updateDiff(window.__activeTab === 'global' ? 'global' : 'current') }catch(e){}
     const saveBtn = document.getElementById('saveRules')
     if(saveBtn) saveBtn.disabled = true
     if(combined.length === 0){ if(host) status.textContent = 'No site-specific rules found'; else status.textContent = 'No host detected' }
@@ -295,19 +295,39 @@ async function saveSiteRules(){
       }
       remaining.push(ln)
     }
-    // build new text preserving whitespace: join remaining and insert editedText with exactly one separator if needed
+    // build new text preserving whitespace and wrap editedText in markers for this host
     const base = remaining.join('\n')
+    // if editedText is empty or only whitespace, remove any existing block (do not create empty marker block)
     let newText = ''
-    if(base === '') newText = editedText
-    else if(base.endsWith('\n') || editedText.startsWith('\n')) newText = base + editedText
-    else newText = base + '\n' + editedText
+    const editedTrim = editedText.split('\n').map(l=>l.trim()).filter(l=>l.length>0).join('\n')
+    if(!editedTrim){
+      // just keep remaining (no block)
+      newText = base
+    } else {
+      const blockLines = [startMarker, ...(editedText === '' ? [] : editedText.split('\n')), endMarker]
+      if(base === '') newText = blockLines.join('\n')
+      else newText = base + '\n' + blockLines.join('\n')
+    }
     const ok = await putRoutingA(newText, s)
     if(ok){
       status.textContent = 'Saved'
       const taCur = document.getElementById('rulesAreaCurrent')
       const newDisplayed = (taCur && taCur.value) ? taCur.value : editedText
       window.__originalDisplayed_current = newDisplayed
-      window.__originalBlockExists = (editedText.split('\n').map(l=>l.trim()).filter(l=>l.length>0).length > 0)
+      window.__originalBlockExists = !!editedTrim
+      // update global textarea and local draft so Global reflects saved server config
+      try{
+        const key = 'draft_rules_global'
+        const obj = {}
+        obj[key] = newText
+        storage.set(obj)
+      }catch(e){}
+      try{
+        const taGlobEl = document.getElementById('rulesAreaGlobal')
+        if(taGlobEl) taGlobEl.value = newText
+        window.__originalDisplayed_global = newText
+        window.__originalDisplayed_global_norm = (newText || '').replace(/\r/g,'')
+      }catch(e){}
       // restore button text (kept disabled)
       if(saveBtn) saveBtn.textContent = 'Save'
       // update diff after successful save
