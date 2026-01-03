@@ -1,35 +1,260 @@
+@import url('https://fonts.googleapis.com/css2?family=Days+One&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Lobster&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Raleway:ital,wght@0,100..900;1,100..900&family=Rubik+Dirt&display=swap');
+
 /* Styles extracted from popup.html (based on GUI theme) */
-@font-face { font-family: InterLocal; src: local('Inter'), local('Inter-Regular'); }
-body{font-family: InterLocal, Arial, Helvetica, sans-serif; width:320px; padding:12px; background:#fff}
-button{width:100%; padding:8px 10px; margin:6px 0; border-radius:4px; border:none; cursor:pointer; font-size:13px; transition:background .12s, transform .06s}
-button:active{transform:translateY(1px)}
+/* Using Google Font: Inter (with fallbacks) */
+body {
+    font-family: 'Inter', Arial, Helvetica, sans-serif;
+    width: 320px;
+    padding: 12px;
+    background: #fff;
+    margin: 0;
+}
+
+label {
+    font-size: 13px
+}
+
+input {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 6px 0;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #e6e6e6
+}
+
+
+button {
+    width: 48%;
+    padding: 8px 10px;
+    margin: 6px 0;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background .12s, transform .06s
+}
+
+button:active {
+    transform: translateY(1px)
+}
+
 /* header buttons unified size */
-.header-btn{width:40px; height:34px; padding:0; display:flex; align-items:center; justify-content:center}
-#proxyState{min-width:56px; color:#fff}
+.header-btn {
+    width: 40px;
+    height: 34px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center
+}
+
+#proxyState {
+    min-width: 56px;
+    color: #fff
+}
+
 /* default neutral button */
-.btn-neutral{background:#f2f2f2; color:#333}
+.btn-neutral {
+    background: #f2f2f2;
+    color: #333
+}
+
 /* Colors from GUI buefy.scss */
-.state-working{background:#506da4; color:#fff}
-.state-working:hover{background:#40557f}
-.state-ready{background:#dc8e47; color:#fff}
-.state-ready:hover{background:#b86f2e}
-.state-starting{background:#4497a5; color:#fff}
-.state-starting:hover{background:#347b86}
+.state-working {
+    background: #506da4;
+    color: #fff
+}
+
+.state-working:hover {
+    background: #40557f
+}
+
+.state-ready {
+    background: #dc8e47;
+    color: #fff
+}
+
+.state-ready:hover {
+    background: #b86f2e
+}
+
+.state-starting {
+    background: #4497a5;
+    color: #fff
+}
+
+.state-starting:hover {
+    background: #347b86
+}
+
 /* small hover for general buttons */
-button:hover{filter:brightness(0.97)}
-.muted{color:#666; font-size:12px}
-textarea{font-family: InterLocal, Arial, Helvetica, sans-serif; font-size:13px}
+button:hover {
+    filter: brightness(0.97)
+}
+
+.muted {
+    color: #666;
+    font-size: 12px
+}
+
+textarea {
+    font-family: 'Inter', Arial, Helvetica, sans-serif;
+    font-size: 13px
+}
 
 /* Layout helpers moved from popup.html */
-.header-container{display:flex; align-items:center; justify-content:space-between}
-.title{margin:0; font-weight:600}
-.header-buttons{display:flex; gap:6px; align-items:center}
-.header-settings-btn{width:34px; height:34px; padding:0; display:flex; align-items:center; justify-content:center}
-.save{padding:6px}
-textarea{width:100%; box-sizing:border-box}
+.header-container {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 6px
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%
+}
+
+.header-favicon {
+    width: 16px;
+    height: 16px;
+    display: block
+}
+
+.big-title, .title {
+    margin: 0;
+    font-weight: 700;
+    font-size: 18px;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%
+}
+
+/* Tabs for Current / Global */
+.tabs {
+    display: flex;
+    gap: 6px;
+}
+
+.tab {
+    background: #f2f2f2;
+    border: 1px solid #e0e0e0;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.tab.active {
+    background: #fff;
+    border-bottom: 2px solid #506da4;
+    font-weight: 600;
+}
+
+.tab-content textarea {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 8px;
+    font-family: 'Inter', Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    max-height: 230px;
+    max-width: 315px;
+    min-width: 315px;
+    overflow: auto;
+    white-space: pre-wrap;
+}
+
+.tab-content textarea[style*="display:none"] {
+    display: none;
+}
+
+.header-settings-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center
+}
+
+/* Visual diff for current textarea */
+.rules-diff {
+    font-size: 12px;
+    margin-top: 8px;
+    max-height: 92px;
+    overflow: auto;
+    border: 1px solid #eee;
+    padding: 6px;
+    background: #fafafa;
+}
+
+.diff-line {
+    display: flex;
+    gap: 8px;
+    padding: 2px 4px
+}
+
+.diff-line.server {
+    background: #e8f4ff
+}
+
+.diff-line.local {
+    background: #fff4e5
+}
+
+.line-num {
+    color: #888;
+    width: 28px;
+    display: inline-block;
+    text-align: right;
+    margin-right: 8px
+}
+
+.line-text {
+    white-space: pre-wrap;
+    flex: 1
+}
+
+.save {
+    padding: 6px
+}
+
+textarea {
+    width: 100%;
+    box-sizing: border-box
+}
 
 /* icon sizing inside header buttons */
-.icon{width:18px; height:18px; display:block}
-.header-btn .icon{width:20px; height:20px}
-.header-settings-btn .icon{width:18px; height:18px}
+.icon {
+    width: 18px;
+    height: 18px;
+    display: block
+}
 
+.header-btn .icon {
+    width: 20px;
+    height: 20px
+}
+
+.header-settings-btn .icon {
+    width: 18px;
+    height: 18px
+}
+
+.row {
+    display: flex;
+    gap: 8px
+}
+
+.small {
+    width: 48%
+}

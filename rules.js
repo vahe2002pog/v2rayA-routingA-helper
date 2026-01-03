@@ -51,11 +51,13 @@ async function refreshRules(){
     }
     const matchedLines = host ? allLines.filter(l=>matchesHost(l, host)) : []
     const combined = [...new Set([...(blockLines||[]), ...(matchedLines||[])])]
-    // store original displayed content for change detection
-    window.__originalDisplayed = combined.join('\n')
+    // store original displayed content for change detection (current host tab)
+    window.__originalDisplayed_current = combined.join('\n')
     window.__originalBlockExists = (blockLines.length > 0)
-    const ta = document.getElementById('rulesArea')
-    if(ta) ta.value = combined.join('\n')
+    const taCur = document.getElementById('rulesAreaCurrent')
+    if(taCur) taCur.value = combined.join('\n')
+    // update visual diff for current
+    try{ updateDiff('current') }catch(e){}
     const saveBtn = document.getElementById('saveRules')
     if(saveBtn) saveBtn.disabled = true
     if(combined.length === 0){ if(host) status.textContent = 'No site-specific rules found'; else status.textContent = 'No host detected' }
@@ -84,6 +86,24 @@ function matchesHost(line, host){
   return false
 }
 
+// Update visual diff panel for the given tab ('current' or 'global')
+function updateDiff(tab){
+  const diffEl = document.getElementById('rulesDiff')
+  if(!diffEl) return
+  const taId = (tab === 'global') ? 'rulesAreaGlobal' : 'rulesAreaCurrent'
+  const ta = document.getElementById(taId)
+  if(!ta) { diffEl.innerHTML = ''; return }
+  const serverText = (tab === 'global') ? (window.__originalDisplayed_global || '') : (window.__originalDisplayed_current || '')
+  const serverSet = new Set(serverText.split('\n').map(l=> (l||'').trim()))
+  const lines = ta.value === '' ? [] : ta.value.split('\n')
+  const parts = lines.map((line, idx)=>{
+    const kind = serverSet.has((line||'').trim()) ? 'server' : 'local'
+    const esc = (line||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    return `<div class="diff-line ${kind}"><span class="line-num">${idx+1}</span><span class="line-text">${esc}</span></div>`
+  })
+  diffEl.innerHTML = parts.join('')
+}
+
 async function putRoutingA(newText, s){
   const server = s.serverUrl || 'http://192.168.1.1:2017'
   const token = s.token
@@ -104,24 +124,92 @@ async function putRoutingA(newText, s){
   }catch(e){ status.textContent = 'Update failed: '+e.message; return false }
 }
 
+// Toggle to global view: fetch full routingA and show as-is (rows=20)
+async function enterGlobalMode(){
+  const ta = document.getElementById('rulesAreaGlobal')
+  const status = document.getElementById('status')
+  window.__preGlobalDisplayed = (ta && ta.value) ? ta.value : ''
+  window.__activeTab = 'global'
+  if(ta) ta.rows = 15
+  try{
+    const s = await getServer()
+    const resp = await callApi(s.serverUrl||'http://192.168.1.1:2017', s.token, '/api/routingA', 'GET')
+    const full = resp && resp.data && resp.data.routingA ? resp.data.routingA : ''
+    if(ta) ta.value = full
+    // store original for global tab
+    window.__originalDisplayed_global = (ta && ta.value) ? ta.value : ''
+    // normalized version for comparison (preserve textarea content as-is)
+    window.__originalDisplayed_global_norm = (window.__originalDisplayed_global || '').replace(/\r/g,'')
+    // restore local global draft if present
+    try{
+      storage.get(['draft_rules_global'], r=>{
+        if(r && typeof r['draft_rules_global'] === 'string'){
+          const draft = r['draft_rules_global']
+          if(draft !== (ta.value || '')){
+            if(ta) ta.value = draft
+            const st = document.getElementById('status')
+            if(st) st.textContent = 'Restored local global draft'
+          }
+        }
+      })
+    }catch(e){}
+    const val = validateRoutingText(ta.value || '')
+    const saveBtn = document.getElementById('saveRules')
+    if(!val.ok){ if(status) status.textContent = 'Validation: ' + val.errors.join('; '); if(saveBtn) saveBtn.disabled = true }
+    else { if(status) status.textContent = ''; if(saveBtn) saveBtn.disabled = false }
+  }catch(e){ if(status) status.textContent = 'Cannot fetch full config: ' + (e.message||e) }
+}
+
+// Return to host-specific view; if revert=true, cancel unsaved changes and restore previous displayed content
+function enterHostMode(revert){
+  window.__activeTab = 'current'
+  const ta = document.getElementById('rulesAreaCurrent')
+  const status = document.getElementById('status')
+  const saveBtn = document.getElementById('saveRules')
+  if(ta){ ta.rows = 5; if(revert){ ta.value = (window.__preGlobalDisplayed || window.__originalDisplayed_current || '') } }
+  const cur = (ta && ta.value) ? ta.value : ''
+  const orig = (window.__originalDisplayed_current || '')
+  // normalized for comparison
+  const orig_norm = (orig || '').replace(/\r/g,'')
+  const cur_norm = (cur || '').replace(/\r/g,'')
+  const val = validateRoutingText(cur)
+  if(!val.ok){ if(status) status.textContent = 'Validation: ' + val.errors.join('; '); if(saveBtn) saveBtn.disabled = true }
+  else { if(status) status.textContent = ''; if(saveBtn) saveBtn.disabled = (orig_norm === cur_norm) }
+}
+
 
 async function addDomainToRouting(host){
-  const ta = document.getElementById('rulesArea')
   const status = document.getElementById('status')
+  // choose target textarea based on active tab
+  const targetId = (window.__activeTab === 'global') ? 'rulesAreaGlobal' : 'rulesAreaCurrent'
+  const ta = document.getElementById(targetId)
   if(!ta){ if(status) status.textContent = 'No textarea found'; return }
   const rule = `domain(${host})->proxy`
-  const cur = ta.value.split('\n').map(l=>l.trim()).filter(l=>l.length>0)
-  if(cur.includes(rule)){ if(status) status.textContent = 'Rule already in textarea'; return }
-  cur.push(rule)
-  ta.value = cur.join('\n')
+  // preserve existing whitespace; only trim for duplicate detection
+  const lines = ta.value === '' ? [] : ta.value.split('\n')
+  const exists = lines.some(l => (l || '').trim() === rule)
+  if(exists){ if(status) status.textContent = 'Rule already in textarea'; return }
+  lines.push(rule)
+  ta.value = lines.join('\n')
+  // if current tab — update local draft for host as exact textarea content
+  if(targetId === 'rulesAreaCurrent'){
+    try{
+      const keyHost = await getCurrentTabHost()
+      const key = draftKeyForHost(keyHost)
+      if(key){ const obj = {}; obj[key] = ta.value; storage.set(obj) }
+    }catch(e){}
+  }
   // enable Save
   const saveBtn = document.getElementById('saveRules')
   if(saveBtn) saveBtn.disabled = false
   if(status) status.textContent = 'Added to textarea (click Save to apply)'
+  // update diff when adding
+  try{ updateDiff(window.__activeTab === 'global' ? 'global' : 'current') }catch(e){}
 }
 
 function draftKeyForHost(host){
-  if(!host) return 'draft_rules_global'
+  // Return null when no host – we no longer keep a separate global draft.
+  if(!host) return null
   return 'draft_rules_' + host
 }
 
@@ -162,21 +250,36 @@ async function saveSiteRules(){
     }
     const routing = resp.data.routingA || ''
     const allLines = routing.split('\n')
-    const editedText = document.getElementById('rulesArea').value || ''
-    let editedLines = editedText.split('\n').map(l=>l.trim()).filter(l=>l.length>0)
-    editedLines = [...new Set(editedLines)]
-    // local validation before attempting to save
-    const val = validateRoutingText(editedLines.join('\n'))
+    const editedText = (window.__activeTab === 'global') ? (document.getElementById('rulesAreaGlobal').value || '') : (document.getElementById('rulesAreaCurrent').value || '')
+    // local validation before attempting to save (validate full text as-is)
+    const val = validateRoutingText(editedText)
     if(!val.ok){
       status.textContent = 'Validation failed: ' + val.errors.join('; ')
       if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save' }
       return
     }
+    // If in global tab, save entire text as-is (no markers)
+    if(window.__activeTab === 'global'){
+      const newTextGlobal = editedText
+      const okg = await putRoutingA(newTextGlobal, s)
+      if(okg){
+        status.textContent = 'Saved'
+        window.__originalDisplayed_global = newTextGlobal
+        window.__originalDisplayed_global_norm = (newTextGlobal || '').replace(/\r/g,'')
+        window.__originalBlockExists = false
+        if(saveBtn) saveBtn.textContent = 'Save'
+        try{ chrome.tabs.query({active:true,currentWindow:true}, tabs=>{ if(tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id) }) }catch(e){}
+      } else {
+        if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save' }
+      }
+      return
+    }
+
+    // host-specific mode: remove existing block/lines that match host and append edited text as-is (WITHOUT adding start/end markers)
     const host = await getCurrentTabHost()
     if(!host){ status.textContent = 'No host detected'; if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save' } ; return }
     const startMarker = `# domain - web extension config: ${host}`
     const endMarker = `# end domain - web extension config: ${host}`
-    // remove existing block for host and any lines that match host
     const remaining = []
     for(let i=0;i<allLines.length;i++){
       const ln = allLines[i]
@@ -192,22 +295,23 @@ async function saveSiteRules(){
       }
       remaining.push(ln)
     }
-    // if editedLines non-empty, append block at end
-    if(editedLines.length > 0){
-      remaining.push(startMarker)
-      remaining.push(...editedLines)
-      remaining.push(endMarker)
-    }
-    const newText = remaining.join('\n')
+    // build new text preserving whitespace: join remaining and insert editedText with exactly one separator if needed
+    const base = remaining.join('\n')
+    let newText = ''
+    if(base === '') newText = editedText
+    else if(base.endsWith('\n') || editedText.startsWith('\n')) newText = base + editedText
+    else newText = base + '\n' + editedText
     const ok = await putRoutingA(newText, s)
     if(ok){
       status.textContent = 'Saved'
-      const ta = document.getElementById('rulesArea')
-      const newDisplayed = (ta && ta.value) ? ta.value.trim() : editedLines.join('\n')
-      window.__originalDisplayed = newDisplayed
-      window.__originalBlockExists = (editedLines.length > 0)
+      const taCur = document.getElementById('rulesAreaCurrent')
+      const newDisplayed = (taCur && taCur.value) ? taCur.value : editedText
+      window.__originalDisplayed_current = newDisplayed
+      window.__originalBlockExists = (editedText.split('\n').map(l=>l.trim()).filter(l=>l.length>0).length > 0)
       // restore button text (kept disabled)
       if(saveBtn) saveBtn.textContent = 'Save'
+      // update diff after successful save
+      try{ updateDiff('current') }catch(e){}
       // reload active tab to reflect changed proxy/rules
       try{ chrome.tabs.query({active:true,currentWindow:true}, tabs=>{ if(tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id) }) }catch(e){}
     } else {
@@ -278,30 +382,82 @@ window.onload = async ()=>{
   }
   const saveBtn = document.getElementById('saveRules')
   if(saveBtn) saveBtn.onclick = saveSiteRules
-  const ta = document.getElementById('rulesArea')
-  if(ta && saveBtn){
-    ta.addEventListener('input', async ()=>{
-      const orig = (window.__originalDisplayed || '').trim()
-      const cur = ta.value.trim()
-      // autosave draft to storage per-host
+  // Tabs setup: two separate textareas (current/global)
+  const tabCurrent = document.getElementById('tabCurrent')
+  const tabGlobal = document.getElementById('tabGlobal')
+  const taCur = document.getElementById('rulesAreaCurrent')
+  const taGlob = document.getElementById('rulesAreaGlobal')
+  // default to current tab
+  window.__activeTab = 'current'
+  function showTab(name){
+    if(name === 'current'){
+      if(tabCurrent) tabCurrent.classList.add('active')
+      if(tabGlobal) tabGlobal.classList.remove('active')
+      if(taCur) taCur.style.display = ''
+      if(taGlob) taGlob.style.display = 'none'
+      enterHostMode(false)
+      try{ updateDiff('current') }catch(e){}
+    } else {
+      if(tabGlobal) tabGlobal.classList.add('active')
+      if(tabCurrent) tabCurrent.classList.remove('active')
+      if(taCur) taCur.style.display = 'none'
+      if(taGlob) taGlob.style.display = ''
+      // disable Save while loading global content to avoid flicker
+      const saveBtn = document.getElementById('saveRules')
+      if(saveBtn) saveBtn.disabled = true
+      // load global content
+      enterGlobalMode().catch(()=>{}).finally(()=>{
+        if(saveBtn){
+          // compare normalized to decide enabled state
+          const orig_norm = (window.__originalDisplayed_global_norm || '')
+          const cur_norm = ( (document.getElementById('rulesAreaGlobal')||{value:''}).value || '' ).replace(/\r/g,'')
+          saveBtn.disabled = (orig_norm === cur_norm)
+        }
+        try{ updateDiff('global') }catch(e){}
+      })
+    }
+  }
+  if(tabCurrent) tabCurrent.addEventListener('click', ()=> showTab('current'))
+  if(tabGlobal) tabGlobal.addEventListener('click', ()=> showTab('global'))
+
+  // Input handler for current textarea (autosave per-host)
+  if(taCur && saveBtn){
+    taCur.addEventListener('input', async ()=>{
+      const orig = (window.__originalDisplayed_current || '')
+      const cur = taCur.value
       try{
         const host = await getCurrentTabHost()
         const key = draftKeyForHost(host)
-        const obj = {}
-        obj[key] = cur
-        storage.set(obj)
-      }catch(e){ }
-      // live validation
+        if(key){ const obj = {}; obj[key] = cur; storage.set(obj) }
+      }catch(e){}
+      // normalize for comparison to avoid CRLF issues
+      const orig_norm = (orig || '').replace(/\r/g,'')
+      const cur_norm = (cur || '').replace(/\r/g,'')
       const val = validateRoutingText(cur)
       const statusEl = document.getElementById('status')
-      if(!val.ok){
-        if(statusEl) statusEl.textContent = 'Validation: ' + val.errors.join('; ')
-        saveBtn.disabled = true
-        return
-      }else{
-        if(statusEl) statusEl.textContent = ''
-      }
-      saveBtn.disabled = (orig === cur)
+      if(!val.ok){ if(statusEl) statusEl.textContent = 'Validation: ' + val.errors.join('; '); saveBtn.disabled = true; return }
+      else { if(statusEl) statusEl.textContent = '' }
+      saveBtn.disabled = (orig_norm === cur_norm)
+      try{ updateDiff('current') }catch(e){}
+    })
+  }
+
+  // Input handler for global textarea (no local draft)
+  if(taGlob && saveBtn){
+    taGlob.addEventListener('input', async ()=>{
+      const orig = (window.__originalDisplayed_global || '')
+      const cur = taGlob.value
+      // save global draft to local storage
+      try{ storage.set({'draft_rules_global': cur}) }catch(e){}
+      const val = validateRoutingText(cur)
+      const statusEl = document.getElementById('status')
+      if(!val.ok){ if(statusEl) statusEl.textContent = 'Validation: ' + val.errors.join('; '); saveBtn.disabled = true; return }
+      else { if(statusEl) statusEl.textContent = '' }
+      // compare normalized to avoid CRLF issues
+      const orig_norm = (orig || '').replace(/\r/g,'')
+      const cur_norm = (cur || '').replace(/\r/g,'')
+      saveBtn.disabled = (orig_norm === cur_norm)
+      try{ updateDiff('global') }catch(e){}
     })
   }
   await refreshRules()
@@ -310,15 +466,16 @@ window.onload = async ()=>{
     const host = await getCurrentTabHost()
     const key = draftKeyForHost(host)
     storage.get([key], r=>{
-      const ta = document.getElementById('rulesArea')
+      const ta = document.getElementById('rulesAreaCurrent')
       const saveBtn = document.getElementById('saveRules')
-      if(r && r[key] && ta){
-        const draft = (r[key] || '').trim()
-        if(draft && draft !== (ta.value||'').trim()){
+      if(r && typeof r[key] === 'string' && ta){
+        const draft = r[key]
+          if(draft && draft !== (ta.value||'')){
           ta.value = draft
-          if(saveBtn) saveBtn.disabled = ( (window.__originalDisplayed || '').trim() === draft )
+          if(saveBtn) saveBtn.disabled = ( (window.__originalDisplayed_current || '') === draft )
           const st = document.getElementById('status')
           if(st) st.textContent = 'Restored local draft'
+          try{ updateDiff('current') }catch(e){}
         }
       }
     })

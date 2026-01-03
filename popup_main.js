@@ -11,11 +11,20 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 		const headerRefresh = document.getElementById('headerRefresh')
 		if(headerRefresh){
 			headerRefresh.addEventListener('click', async ()=>{
-				if(typeof refreshRules === 'function') refreshRules()
+					if(typeof refreshRules === 'function') refreshRules()
 				// try to immediately update currentHost display too
 				if(typeof getCurrentTabHost === 'function'){
 					try{ const h = await getCurrentTabHost(); const el = document.getElementById('currentHost'); if(el) el.textContent = h || '-' }catch(e){}
 				}
+					// clear local draft for current host
+					try{
+						if(typeof getCurrentTabHost === 'function'){
+							const h2 = await getCurrentTabHost()
+							if(h2){ const key = 'draft_rules_' + h2; chrome.storage.local.remove([key], ()=>{} ) }
+							// also clear global draft
+							try{ chrome.storage.local.remove(['draft_rules_global'], ()=>{} ) }catch(e){}
+						}
+					}catch(e){}
 				// also reload active tab to reflect changes
 				try{ chrome.tabs.query({active:true,currentWindow:true}, tabs=>{ if(tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id) }) }catch(e){}
 			})
