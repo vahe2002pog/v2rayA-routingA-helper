@@ -345,9 +345,229 @@ async function getCurrentTabHost(){
   return new Promise(res=>{
     chrome.tabs.query({active:true,currentWindow:true}, tabs=>{
       if(!tabs || tabs.length===0) return res(null)
-      try{ const url = new URL(tabs[0].url); res(url.hostname) }catch(e){ res(null) }
+      const tab = tabs[0]
+      const tabId = tab.id
+      // Try to get hostname from the visible tab URL first
+      try{
+        if(tab && tab.url){
+          const url = new URL(tab.url)
+          if(url && url.hostname) return res(url.hostname)
+        }
+      }catch(e){ /* fallthrough to stored fallback */ }
+      // Fallback: check background-captured host for this tab
+      if(!tabId && tabId !== 0) return res(null)
+      const key = 'host_for_tab_' + tabId
+      storage.get([key], r=>{
+        if(r && typeof r[key] === 'string' && r[key]) return res(r[key])
+        return res(null)
+      })
     })
   })
+}
+
+async function getCurrentTabDomains(){
+  return new Promise(res=>{
+    chrome.tabs.query({active:true,currentWindow:true}, tabs=>{
+      if(!tabs || tabs.length===0) return res([])
+      const tab = tabs[0]
+      const tabId = tab.id
+      // always read stored domains and merge with tab.url host (if any)
+      if(tabId === undefined || tabId === null) return res([])
+      const key = 'domains_for_tab_' + tabId
+      const statsKey = 'domain_stats_for_tab_' + tabId
+      storage.get([key, statsKey], r=>{
+        const stored = (r && Array.isArray(r[key])) ? r[key].slice() : []
+        const stats = (r && r[statsKey] && typeof r[statsKey] === 'object') ? r[statsKey] : {}
+        // try to add page's own host as well (may be missing in stored list)
+        try{
+          if(tab && tab.url){
+            const url = new URL(tab.url)
+            if(url && url.hostname && !stored.includes(url.hostname)) stored.unshift(url.hostname)
+          }
+        }catch(e){ }
+        // ensure uniqueness and preserve order
+        const uniqHosts = []
+        for(const h of stored){ if(h && !uniqHosts.includes(h)) uniqHosts.push(h) }
+        // also include any hosts from stats that might not be in stored list
+        for(const h of Object.keys(stats || {})){ if(h && !uniqHosts.includes(h)) uniqHosts.push(h) }
+        const result = uniqHosts.map(h=>{
+          const s = stats && stats[h] ? stats[h] : null
+          const failed = !!(s && s.failed && s.failed > 0)
+          const status = s && s.last !== undefined ? s.last : null
+          return {host: h, failed, status}
+        })
+        return res(result)
+      })
+    })
+  })
+}
+
+function isRuleInTextareaForActiveTab(rule){
+  const taId = (window.__activeTab === 'global') ? 'rulesAreaGlobal' : 'rulesAreaCurrent'
+  const ta = document.getElementById(taId)
+  if(!ta) return false
+  const lines = ta.value === '' ? [] : ta.value.split('\n')
+  return lines.some(l => (l||'').trim() === rule)
+}
+
+async function removeDomainFromTextarea(host){
+  const rule = `domain(${host})->proxy`
+  const taId = (window.__activeTab === 'global') ? 'rulesAreaGlobal' : 'rulesAreaCurrent'
+  const ta = document.getElementById(taId)
+  if(!ta) return false
+  const lines = ta.value === '' ? [] : ta.value.split('\n')
+  const filtered = lines.filter(l => (l||'').trim() !== rule)
+  ta.value = filtered.join('\n')
+  // update local draft storage
+  try{
+    if(window.__activeTab === 'global'){
+      storage.set({'draft_rules_global': ta.value})
+    } else {
+      const hostKey = await getCurrentTabHost()
+      const key = draftKeyForHost(hostKey)
+      if(key){ const obj = {}; obj[key] = ta.value; storage.set(obj) }
+    }
+  }catch(e){}
+  try{ updateDiff(window.__activeTab === 'global' ? 'global' : 'current') }catch(e){}
+  // enable Save since textarea was modified programmatically
+  try{
+    const saveBtn = document.getElementById('saveRules')
+    if(saveBtn) saveBtn.disabled = false
+  }catch(e){}
+  return true
+}
+
+function showDomainsModal(domains){
+  let modal = document.getElementById('domainsModal')
+  if(modal) modal.remove()
+  modal = document.createElement('div')
+  modal.id = 'domainsModal'
+  modal.style = 'position:fixed;left:10%;top:10%;width:80%;height:80%;background:#fff;border:1px solid #888;box-shadow:0 2px 10px rgba(0,0,0,0.5);z-index:9999;padding:12px;overflow:auto;'
+
+  const header = document.createElement('div')
+  header.style = 'display:flex;align-items:center;justify-content:space-between'
+  const title = document.createElement('h3')
+  title.textContent = 'Contacted domains'
+  const rightBtns = document.createElement('div')
+  rightBtns.style = 'display:flex;gap:8px;align-items:center'
+  // refresh button (left of Close)
+  const refreshBtn = document.createElement('button')
+  refreshBtn.title = 'Refresh domains'
+  const rimg = document.createElement('img')
+  rimg.src = 'icons/reload.svg'
+  rimg.alt = 'refresh'
+  rimg.style = 'width:16px;height:16px'
+  refreshBtn.appendChild(rimg)
+  refreshBtn.onclick = async (e)=>{
+    e.preventDefault(); e.stopPropagation()
+    try{
+      const st = document.getElementById('status')
+      if(st) st.textContent = 'Refreshing domains...'
+      const domains = await getCurrentTabDomains()
+      // re-render modal with updated domains
+      showDomainsModal(domains)
+    }catch(err){ const st = document.getElementById('status'); if(st) st.textContent = 'Refresh failed: '+(err.message||err) }
+  }
+  // make buttons same height and style
+  refreshBtn.style = 'height:30px;display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border:1px solid #ccc;background:#fff;border-radius:4px;cursor:pointer'
+
+  const closeBtn = document.createElement('button')
+  closeBtn.textContent = 'Close'
+  closeBtn.onclick = ()=>{ modal.remove() }
+  closeBtn.style = 'height:30px;display:inline-flex;align-items:center;justify-content:center;padding:4px 12px;border:1px solid #ccc;background:#fff;border-radius:4px;cursor:pointer'
+  rightBtns.appendChild(refreshBtn)
+  rightBtns.appendChild(closeBtn)
+  header.appendChild(title)
+  header.appendChild(rightBtns)
+  modal.appendChild(header)
+
+  const list = document.createElement('ul')
+  list.style = 'list-style:none;padding:0;margin:8px 0;max-height:calc(100% - 80px);overflow:auto'
+  if(!domains || domains.length === 0){
+    const p = document.createElement('div')
+    p.textContent = '(no domains)'
+    modal.appendChild(p)
+    document.body.appendChild(modal)
+    return
+  }
+
+  // sort: failed domains first
+  const items = (domains || []).slice().sort((a,b)=>{
+    const fa = (typeof a === 'object' && a && a.failed) ? 1 : 0
+    const fb = (typeof b === 'object' && b && b.failed) ? 1 : 0
+    return fb - fa
+  })
+
+  items.forEach(d=>{
+    const li = document.createElement('li')
+    li.style = 'display:flex;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px solid #eee'
+    const span = document.createElement('span')
+    const host = (typeof d === 'string') ? d : (d && d.host) ? d.host : ''
+    const failed = (typeof d === 'object') ? !!d.failed : false
+    const status = (typeof d === 'object') ? (d.status !== undefined ? d.status : (d.last !== undefined ? d.last : null)) : null
+    span.textContent = host
+    span.style = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px'
+    // prepare left-side failure marker
+    let failMark = null
+    if(failed){
+      failMark = document.createElement('img')
+      failMark.src = 'icons/alert-outline.svg'
+      failMark.alt = 'failed'
+      failMark.style = 'width:16px;height:16px;margin-right:8px;flex:0'
+    }
+
+    const actions = document.createElement('div')
+    actions.style = 'display:flex;gap:8px;align-items:center'
+    const rule = `domain(${host})->proxy`
+    // toggle icon
+    const toggleImg = document.createElement('img')
+    toggleImg.src = isRuleInTextareaForActiveTab(rule) ? 'icons/delete.svg' : 'icons/plus.svg'
+    toggleImg.alt = isRuleInTextareaForActiveTab(rule) ? 'remove' : 'add'
+    toggleImg.title = isRuleInTextareaForActiveTab(rule) ? 'Remove rule from textarea' : 'Add rule to textarea'
+    toggleImg.style = 'width:18px;height:18px;cursor:pointer'
+    toggleImg.onclick = async (e)=>{
+      e.preventDefault(); e.stopPropagation()
+      if(toggleImg.src && toggleImg.src.endsWith('plus.svg')){
+        await addDomainToRouting(host)
+        toggleImg.src = 'icons/delete.svg'
+        toggleImg.title = 'Remove rule from textarea'
+      } else {
+        await removeDomainFromTextarea(host)
+        toggleImg.src = 'icons/plus.svg'
+        toggleImg.title = 'Add rule to textarea'
+      }
+    }
+
+    // copy icon
+    const copyImg = document.createElement('img')
+    copyImg.src = 'icons/content-copy.svg'
+    copyImg.alt = 'copy'
+    copyImg.title = 'Copy domain to clipboard'
+    copyImg.style = 'width:18px;height:18px;cursor:pointer'
+    copyImg.onclick = (e)=>{
+      e.preventDefault(); e.stopPropagation()
+      const toCopy = host
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(toCopy)
+      } else {
+        try{ const ta = document.createElement('textarea'); ta.value = toCopy; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove() }catch(e){}
+      }
+    }
+
+    actions.appendChild(toggleImg)
+    actions.appendChild(copyImg)
+    if(failMark){
+      const tooltip = (status !== null) ? String(status) : 'failed'
+      failMark.title = tooltip
+      li.appendChild(failMark)
+    }
+    li.appendChild(span)
+    li.appendChild(actions)
+    list.appendChild(li)
+  })
+
+  modal.appendChild(list)
+  document.body.appendChild(modal)
 }
 
 function validateRoutingText(text){
@@ -402,6 +622,15 @@ window.onload = async ()=>{
   }
   const saveBtn = document.getElementById('saveRules')
   if(saveBtn) saveBtn.onclick = saveSiteRules
+  const showBtn = document.getElementById('showDomains')
+  if(showBtn) showBtn.onclick = async ()=>{
+    const st = document.getElementById('status')
+    try{
+      const domains = await getCurrentTabDomains()
+      if(domains && domains.length>0){ showDomainsModal(domains); if(st) st.textContent = '' }
+      else { if(st) st.textContent = 'No domains recorded for this tab' }
+    }catch(e){ if(st) st.textContent = 'Cannot read domains: '+e.message }
+  }
   // Tabs setup: two separate textareas (current/global)
   const tabCurrent = document.getElementById('tabCurrent')
   const tabGlobal = document.getElementById('tabGlobal')
