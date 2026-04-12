@@ -34,11 +34,10 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 		const proxyBtn = document.getElementById('proxyState')
 		async function updateProxyState(){
 			if(!proxyBtn) return
-			// do not change text while polling; show current or default to READY
-			if(!proxyBtn.textContent || proxyBtn.textContent.trim() === '') proxyBtn.textContent = 'Loading...'
+			if(!proxyBtn.textContent || proxyBtn.textContent.trim() === '') proxyBtn.textContent = t('proxy_loading')
 			try{
 				if(typeof getServer !== 'function' || typeof callApi !== 'function'){
-					proxyBtn.textContent = 'Loading...'
+					proxyBtn.textContent = t('proxy_loading')
 					proxyBtn.dataset.state = 'stopped'
 					return
 				}
@@ -46,24 +45,18 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 				const server = s.serverUrl || 'http://192.168.1.1:2017'
 				const token = s.token
 				const resp = await callApi(server, token, '/api/touch', 'GET')
-				if(!resp || resp.code !== 'SUCCESS' || !resp.data){ proxyBtn.textContent = 'Loading...'; proxyBtn.dataset.state = 'stopped'; return }
+				if(!resp || resp.code !== 'SUCCESS' || !resp.data){ proxyBtn.textContent = t('proxy_loading'); proxyBtn.dataset.state = 'stopped'; return }
 				const running = !!resp.data.running
 				const touch = resp.data.touch || {}
 				const connected = (touch.connectedServers && touch.connectedServers.length) ? touch.connectedServers.length : (touch.connectedServer ? touch.connectedServer.length : 0)
-				// Map to labels (Title Case):
-				// running && connected > 0 -> Working
-				// running && connected == 0 -> Ready
-				// !running -> Ready
-				let label = 'Ready'
-				if(running && connected > 0) label = 'Working'
-				else label = 'Ready'
-				proxyBtn.textContent = label
+				const isWorking = running && connected > 0
+				proxyBtn.textContent = isWorking ? t('proxy_working') : t('proxy_ready')
 				proxyBtn.dataset.state = running ? 'running' : 'stopped'
-				// set colors via classes
+				proxyBtn.dataset.label = isWorking ? 'working' : 'ready'
 				proxyBtn.classList.remove('state-working','state-ready','state-starting')
-				if(label === 'Working') proxyBtn.classList.add('state-working')
-				else if(label === 'Ready') proxyBtn.classList.add('state-ready')
-			}catch(e){ proxyBtn.textContent = 'Loading...'; proxyBtn.dataset.state = 'stopped' }
+				if(isWorking) proxyBtn.classList.add('state-working')
+				else proxyBtn.classList.add('state-ready')
+			}catch(e){ proxyBtn.textContent = t('proxy_loading'); proxyBtn.dataset.state = 'stopped' }
 		}
 		if(proxyBtn){ proxyBtn.addEventListener('click', async ()=>{
 			// show loader on click
@@ -91,11 +84,10 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 			proxyBtn.disabled = false
 		})
 
-			// hover behavior: show Stop/Start hint (Title Case labels used)
 			proxyBtn.addEventListener('mouseenter', ()=>{
-				const lbl = (proxyBtn.textContent || '').trim()
-				if(lbl === 'Working') proxyBtn.textContent = 'Stop'
-				else if(lbl === 'Ready') proxyBtn.textContent = 'Start'
+				const lbl = proxyBtn.dataset.label || 'ready'
+				if(lbl === 'working') proxyBtn.textContent = t('proxy_stop')
+				else proxyBtn.textContent = t('proxy_start')
 			})
 			proxyBtn.addEventListener('mouseleave', async ()=>{ await updateProxyState() })
 		// initial update

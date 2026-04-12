@@ -23,15 +23,15 @@ async function login(){
     const resp = await callApi(server, null, '/api/login', 'POST', {username, password})
     if(!resp || resp.code !== 'SUCCESS'){
       const msg = resp && resp.message ? resp.message : 'unknown'
-      status.textContent = 'Login failed: ' + msg
+      status.textContent = t('login_failed') + msg
       return
     }
     const token = resp.data && resp.data.token ? resp.data.token : null
-    if(!token){ status.textContent = 'Login failed: no token in response'; return }
+    if(!token){ status.textContent = t('login_failed') + 'no token in response'; return }
     await setServer({serverUrl: server, token: token, username})
-    status.textContent = 'Login OK'
+    status.textContent = t('login_ok')
     setTimeout(()=>{ location.href = 'popup.html' }, 400)
-  }catch(e){ status.textContent = 'Login failed: '+e.message }
+  }catch(e){ status.textContent = t('login_failed') + e.message }
 }
 
 window.onload = async ()=>{
@@ -61,9 +61,27 @@ window.onload = async ()=>{
     await setServer({token: null, username: null})
     document.getElementById('authInputs').style.display = 'block'
     document.getElementById('loggedIn').style.display = 'none'
-    document.getElementById('status').textContent = 'Logged out'
+    document.getElementById('status').textContent = t('logged_out')
   }
   document.getElementById('btnBack').onclick = ()=>{ location.href = 'popup.html' }
+  // Language picker
+  const langBtns = document.querySelectorAll('.lang-btn')
+  function setActiveLang(lang){
+    langBtns.forEach(b=>{
+      b.classList.toggle('active', b.dataset.lang === lang)
+    })
+    applyLang(lang)
+  }
+  storage.get(['lang'], r=>{
+    setActiveLang((r && r.lang) || 'en')
+  })
+  langBtns.forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const lang = b.dataset.lang
+      storage.set({lang})
+      setActiveLang(lang)
+    })
+  })
   // autosave settings inputs to storage so they are not lost on popup close
   const serverEl = document.getElementById('serverUrl')
   const userEl = document.getElementById('username')
@@ -77,7 +95,7 @@ window.onload = async ()=>{
     await originalLogin()
     // if login succeeded, clear drafts
     const status = document.getElementById('status')
-    if(status && status.textContent && status.textContent.toLowerCase().includes('login ok')){
+    if(status && status.textContent && (status.textContent === t('login_ok'))){
       storage.remove(['settings_draft_serverUrl','settings_draft_username','settings_draft_password'])
     }
   }

@@ -50,7 +50,7 @@ button:active {
 }
 
 #proxyState {
-    min-width: 56px;
+    min-width: 70px;
     color: #fff
 }
 
@@ -257,4 +257,19 @@ textarea {
 
 .small {
     width: 48%
+}
+
+/* Language picker */
+.lang-btn {
+    background: #f2f2f2;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.lang-btn.active {
+    border-color: #506da4;
+    background: #e8f0ff;
+    font-weight: 600;
 }

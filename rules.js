@@ -28,16 +28,16 @@ async function refreshRules(){
     const resp = await callApi(server, token, '/api/routingA', 'GET')
     if(!resp || resp.code !== 'SUCCESS' || !resp.data){
       const msg = resp && resp.message ? resp.message : 'no data'
-      status.textContent = 'Cannot get rules: ' + msg
+      status.textContent = t('cannot_get_rules') + msg
       return
     }
     const routing = resp.data.routingA || ''
     const host = await getCurrentTabHost()
-    if(!host){ status.textContent = 'No host detected' }
+    if(!host){ status.textContent = t('no_host_detected') }
     const allLines = routing.split('\n')
     // find existing block for this host
-    const startMarker = host ? `# domain - web extension config: ${host}` : null
-    const endMarker = host ? `# end domain - web extension config: ${host}` : null
+    const startMarker = host ? `# domain: ${host}` : null
+    const endMarker = host ? `# end domain: ${host}` : null
     let blockLines = []
     if(host){
       const startIdx = allLines.findIndex(l=>l.trim().toLowerCase() === startMarker.toLowerCase())
@@ -60,8 +60,8 @@ async function refreshRules(){
     try{ updateDiff(window.__activeTab === 'global' ? 'global' : 'current') }catch(e){}
     const saveBtn = document.getElementById('saveRules')
     if(saveBtn) saveBtn.disabled = true
-    if(combined.length === 0){ if(host) status.textContent = 'No site-specific rules found'; else status.textContent = 'No host detected' }
-  }catch(e){ status.textContent = 'Cannot get rules: '+e.message }
+    if(combined.length === 0){ if(host) status.textContent = t('no_site_rules'); else status.textContent = t('no_host_detected') }
+  }catch(e){ status.textContent = t('cannot_get_rules')+e.message }
 }
 function matchesHost(line, host){
   if(!line || !host) return false
@@ -104,24 +104,50 @@ function updateDiff(tab){
   diffEl.innerHTML = parts.join('')
 }
 
+// Track saving state for beforeunload warning
+window.__saveInProgress = false
+
+window.addEventListener('beforeunload', (e)=>{
+  if(window.__saveInProgress){
+    e.preventDefault()
+    e.returnValue = 'Saving is in progress. Are you sure you want to leave?'
+    return e.returnValue
+  }
+})
+
 async function putRoutingA(newText, s){
   const server = s.serverUrl || 'http://192.168.1.1:2017'
   const token = s.token
   const status = document.getElementById('status')
   status.textContent = ''
+  window.__saveInProgress = true
   try{
-    const resp = await callApi(server, token, '/api/routingA', 'PUT', {routingA: newText})
-    if(!resp || resp.code !== 'SUCCESS'){
-      const msg = resp && resp.message ? resp.message : 'unknown error'
-      status.textContent = 'Update failed: ' + msg
+    const resp = await new Promise((resolve, reject)=>{
+      chrome.runtime.sendMessage(
+        {type: 'SAVE_ROUTING', newText, serverUrl: server, token},
+        (response)=>{
+          if(chrome.runtime.lastError){
+            reject(new Error(chrome.runtime.lastError.message))
+            return
+          }
+          resolve(response)
+        }
+      )
+    })
+    window.__saveInProgress = false
+    if(!resp || !resp.ok){
+      const msg = (resp && resp.error) ? resp.error : 'unknown error'
+      status.textContent = t('update_failed') + msg
       return false
     }
-    // try to ask server to reload v2ray (best-effort)
-    try{ const r2 = await callApi(server, token, '/api/v2ray', 'POST', {}); }catch(e){}
-    status.textContent = 'Updated'
+    status.textContent = t('updated')
     await refreshRules()
     return true
-  }catch(e){ status.textContent = 'Update failed: '+e.message; return false }
+  }catch(e){
+    window.__saveInProgress = false
+    status.textContent = t('update_failed')+e.message
+    return false
+  }
 }
 
 // Toggle to global view: fetch full routingA and show as-is (rows=20)
@@ -148,16 +174,16 @@ async function enterGlobalMode(){
           if(draft !== (ta.value || '')){
             if(ta) ta.value = draft
             const st = document.getElementById('status')
-            if(st) st.textContent = 'Restored local global draft'
+            if(st) st.textContent = t('restored_global_draft')
           }
         }
       })
     }catch(e){}
     const val = validateRoutingText(ta.value || '')
     const saveBtn = document.getElementById('saveRules')
-    if(!val.ok){ if(status) status.textContent = 'Validation: ' + val.errors.join('; '); if(saveBtn) saveBtn.disabled = true }
+    if(!val.ok){ if(status) status.textContent = t('validation_prefix') + val.errors.join('; '); if(saveBtn) saveBtn.disabled = true }
     else { if(status) status.textContent = ''; if(saveBtn) saveBtn.disabled = false }
-  }catch(e){ if(status) status.textContent = 'Cannot fetch full config: ' + (e.message||e) }
+  }catch(e){ if(status) status.textContent = t('cannot_fetch_config') + (e.message||e) }
 }
 
 // Return to host-specific view; if revert=true, cancel unsaved changes and restore previous displayed content
@@ -173,7 +199,7 @@ function enterHostMode(revert){
   const orig_norm = (orig || '').replace(/\r/g,'')
   const cur_norm = (cur || '').replace(/\r/g,'')
   const val = validateRoutingText(cur)
-  if(!val.ok){ if(status) status.textContent = 'Validation: ' + val.errors.join('; '); if(saveBtn) saveBtn.disabled = true }
+  if(!val.ok){ if(status) status.textContent = t('validation_prefix') + val.errors.join('; '); if(saveBtn) saveBtn.disabled = true }
   else { if(status) status.textContent = ''; if(saveBtn) saveBtn.disabled = (orig_norm === cur_norm) }
 }
 
@@ -183,12 +209,12 @@ async function addDomainToRouting(host){
   // choose target textarea based on active tab
   const targetId = (window.__activeTab === 'global') ? 'rulesAreaGlobal' : 'rulesAreaCurrent'
   const ta = document.getElementById(targetId)
-  if(!ta){ if(status) status.textContent = 'No textarea found'; return }
+  if(!ta){ if(status) status.textContent = t('no_host'); return }
   const rule = `domain(${host})->proxy`
   // preserve existing whitespace; only trim for duplicate detection
   const lines = ta.value === '' ? [] : ta.value.split('\n')
   const exists = lines.some(l => (l || '').trim() === rule)
-  if(exists){ if(status) status.textContent = 'Rule already in textarea'; return }
+  if(exists){ if(status) status.textContent = t('rule_already'); return }
   lines.push(rule)
   ta.value = lines.join('\n')
   // if current tab — update local draft for host as exact textarea content
@@ -202,7 +228,7 @@ async function addDomainToRouting(host){
   // enable Save
   const saveBtn = document.getElementById('saveRules')
   if(saveBtn) saveBtn.disabled = false
-  if(status) status.textContent = 'Added to textarea (click Save to apply)'
+  if(status) status.textContent = t('added_to_textarea')
   // update diff when adding
   try{ updateDiff(window.__activeTab === 'global' ? 'global' : 'current') }catch(e){}
 }
@@ -221,14 +247,14 @@ async function removeDomainFromRouting(host){
     const resp = await callApi(s.serverUrl||'http://192.168.1.1:2017', s.token, '/api/routingA', 'GET')
     if(!resp || resp.code !== 'SUCCESS' || !resp.data){
       const msg = resp && resp.message ? resp.message : 'no data'
-      status.textContent = 'Remove failed: ' + msg
+      status.textContent = t('remove_failed') + msg
       return
     }
     const text = resp.data.routingA || ''
     const rule = `domain(${host})->proxy`
     const lines = text.split('\n').filter(l=>l.trim() !== rule)
     await putRoutingA(lines.join('\n'), s)
-  }catch(e){ status.textContent = 'Remove failed: '+e.message }
+  }catch(e){ status.textContent = t('remove_failed')+e.message }
 }
 
 // Save edited site-specific rules: replace original site lines in full routingA
@@ -237,15 +263,17 @@ async function saveSiteRules(){
   const server = s.serverUrl || 'http://192.168.1.1:2017'
   const token = s.token
   const status = document.getElementById('status')
-  status.textContent = 'Saving...'
+  status.textContent = t('saving')
+  window.__saveInProgress = true
   const saveBtn = document.getElementById('saveRules')
-  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Saving...' }
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = t('saving') }
   try{
     const resp = await callApi(server, token, '/api/routingA', 'GET')
     if(!resp || resp.code !== 'SUCCESS' || !resp.data){
       const msg = resp && resp.message ? resp.message : 'no data'
-      status.textContent = 'Save failed: ' + msg
-      if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save' }
+      status.textContent = t('save_failed') + msg
+      window.__saveInProgress = false
+      if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = t('save') }
       return
     }
     const routing = resp.data.routingA || ''
@@ -254,32 +282,34 @@ async function saveSiteRules(){
     // local validation before attempting to save (validate full text as-is)
     const val = validateRoutingText(editedText)
     if(!val.ok){
-      status.textContent = 'Validation failed: ' + val.errors.join('; ')
-      if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save' }
+      status.textContent = t('validation_failed') + val.errors.join('; ')
+      window.__saveInProgress = false
+      if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = t('save') }
       return
     }
     // If in global tab, save entire text as-is (no markers)
     if(window.__activeTab === 'global'){
       const newTextGlobal = editedText
       const okg = await putRoutingA(newTextGlobal, s)
+      window.__saveInProgress = false
       if(okg){
-        status.textContent = 'Saved'
+        status.textContent = t('saved')
         window.__originalDisplayed_global = newTextGlobal
         window.__originalDisplayed_global_norm = (newTextGlobal || '').replace(/\r/g,'')
         window.__originalBlockExists = false
-        if(saveBtn) saveBtn.textContent = 'Save'
+        if(saveBtn) saveBtn.textContent = t('save')
         try{ chrome.tabs.query({active:true,currentWindow:true}, tabs=>{ if(tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id) }) }catch(e){}
       } else {
-        if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save' }
+        if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = t('save') }
       }
       return
     }
 
     // host-specific mode: remove existing block/lines that match host and append edited text as-is (WITHOUT adding start/end markers)
     const host = await getCurrentTabHost()
-    if(!host){ status.textContent = 'No host detected'; if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save' } ; return }
-    const startMarker = `# domain - web extension config: ${host}`
-    const endMarker = `# end domain - web extension config: ${host}`
+    if(!host){ status.textContent = t('no_host_detected'); window.__saveInProgress = false; if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = t('save') } ; return }
+    const startMarker = `# domain: ${host}`
+    const endMarker = `# end domain: ${host}`
     const remaining = []
     for(let i=0;i<allLines.length;i++){
       const ln = allLines[i]
@@ -309,8 +339,9 @@ async function saveSiteRules(){
       else newText = base + '\n' + blockLines.join('\n')
     }
     const ok = await putRoutingA(newText, s)
+    window.__saveInProgress = false
     if(ok){
-      status.textContent = 'Saved'
+      status.textContent = t('saved')
       const taCur = document.getElementById('rulesAreaCurrent')
       const newDisplayed = (taCur && taCur.value) ? taCur.value : editedText
       window.__originalDisplayed_current = newDisplayed
@@ -329,16 +360,16 @@ async function saveSiteRules(){
         window.__originalDisplayed_global_norm = (newText || '').replace(/\r/g,'')
       }catch(e){}
       // restore button text (kept disabled)
-      if(saveBtn) saveBtn.textContent = 'Save'
+      if(saveBtn) saveBtn.textContent = t('save')
       // update diff after successful save
       try{ updateDiff('current') }catch(e){}
       // reload active tab to reflect changed proxy/rules
       try{ chrome.tabs.query({active:true,currentWindow:true}, tabs=>{ if(tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id) }) }catch(e){}
     } else {
       // if failed, allow save again so user can retry after fixing
-      if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save' }
+      if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = t('save') }
     }
-  }catch(e){ status.textContent = 'Save failed: '+e.message; if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save' } }
+  }catch(e){ window.__saveInProgress = false; status.textContent = t('save_failed')+e.message; if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = t('save') } }
 }
 
 async function getCurrentTabHost(){
@@ -447,7 +478,7 @@ function showDomainsModal(domains){
   const header = document.createElement('div')
   header.style = 'display:flex;align-items:center;justify-content:space-between'
   const title = document.createElement('h3')
-  title.textContent = 'Contacted domains'
+  title.textContent = t('contacted_domains')
   const rightBtns = document.createElement('div')
   rightBtns.style = 'display:flex;gap:8px;align-items:center'
   // refresh button (left of Close)
@@ -462,17 +493,17 @@ function showDomainsModal(domains){
     e.preventDefault(); e.stopPropagation()
     try{
       const st = document.getElementById('status')
-      if(st) st.textContent = 'Refreshing domains...'
+      if(st) st.textContent = t('refreshing_domains')
       const domains = await getCurrentTabDomains()
       // re-render modal with updated domains
       showDomainsModal(domains)
-    }catch(err){ const st = document.getElementById('status'); if(st) st.textContent = 'Refresh failed: '+(err.message||err) }
+    }catch(err){ const st = document.getElementById('status'); if(st) st.textContent = t('refresh_failed')+(err.message||err) }
   }
   // make buttons same height and style
   refreshBtn.style = 'height:30px;display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border:1px solid #ccc;background:#fff;border-radius:4px;cursor:pointer'
 
   const closeBtn = document.createElement('button')
-  closeBtn.textContent = 'Close'
+  closeBtn.textContent = t('close')
   closeBtn.onclick = ()=>{ modal.remove() }
   closeBtn.style = 'height:30px;display:inline-flex;align-items:center;justify-content:center;padding:4px 12px;border:1px solid #ccc;background:#fff;border-radius:4px;cursor:pointer'
   rightBtns.appendChild(refreshBtn)
@@ -485,7 +516,7 @@ function showDomainsModal(domains){
   list.style = 'list-style:none;padding:0;margin:8px 0;max-height:calc(100% - 80px);overflow:auto'
   if(!domains || domains.length === 0){
     const p = document.createElement('div')
-    p.textContent = '(no domains)'
+    p.textContent = t('no_domains_list')
     modal.appendChild(p)
     document.body.appendChild(modal)
     return
@@ -542,7 +573,7 @@ function showDomainsModal(domains){
     const copyImg = document.createElement('img')
     copyImg.src = 'icons/content-copy.svg'
     copyImg.alt = 'copy'
-    copyImg.title = 'Copy domain to clipboard'
+    copyImg.title = t('copy_domain')
     copyImg.style = 'width:18px;height:18px;cursor:pointer'
     copyImg.onclick = (e)=>{
       e.preventDefault(); e.stopPropagation()
@@ -580,28 +611,29 @@ function validateRoutingText(text){
     // basic checks: balanced parentheses
     const open = (l.match(/\(/g) || []).length
     const close = (l.match(/\)/g) || []).length
-    if(open !== close){ errors.push(`line ${i+1}: unbalanced parentheses`) }
+    if(open !== close){ errors.push(`line ${i+1}: ${t('val_unbalanced')}`) }
     // domain/ip rules should contain ')->' to separate action
     if(/\b(domain|ip)\s*\(/i.test(l)){
       if(!/\)\s*->/.test(l)){
-        errors.push(`line ${i+1}: expected ')->' after domain/ip list`) }
+        errors.push(`line ${i+1}: ${t('val_expected_arrow')}`) }
     }
     // any rule with '->' should have RHS
     if(l.includes('->')){
       const parts = l.split('->')
       if(parts.length<2 || parts[1].trim() === ''){
-        errors.push(`line ${i+1}: missing action after '->'`)
+        errors.push(`line ${i+1}: ${t('val_missing_action')}`)
       }
     }
     // disallow control characters
     if(/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(l)){
-      errors.push(`line ${i+1}: contains control characters`)
+      errors.push(`line ${i+1}: ${t('val_control_chars')}`)
     }
   }
   return {ok: errors.length===0, errors}
 }
 
 window.onload = async ()=>{
+  loadLang()
   const btnRefresh = document.getElementById('btnRefresh')
   if(btnRefresh) btnRefresh.onclick = refreshRules
   const btnBack = document.getElementById('btnBack')
@@ -610,14 +642,14 @@ window.onload = async ()=>{
   if(addBtn) addBtn.onclick = async ()=>{
     const domainInput = document.getElementById('domainInput')
     const host = (domainInput && domainInput.value) ? domainInput.value : await getCurrentTabHost()
-    if(!host){ const st = document.getElementById('status'); if(st) st.textContent = 'No host'; return }
+    if(!host){ const st = document.getElementById('status'); if(st) st.textContent = t('no_host'); return }
     await addDomainToRouting(host)
   }
   const remBtn = document.getElementById('removeDomain')
   if(remBtn) remBtn.onclick = async ()=>{
     const domainInput = document.getElementById('domainInput')
     const host = (domainInput && domainInput.value) ? domainInput.value : await getCurrentTabHost()
-    if(!host){ const st = document.getElementById('status'); if(st) st.textContent = 'No host'; return }
+    if(!host){ const st = document.getElementById('status'); if(st) st.textContent = t('no_host'); return }
     await removeDomainFromRouting(host)
   }
   const saveBtn = document.getElementById('saveRules')
@@ -628,8 +660,8 @@ window.onload = async ()=>{
     try{
       const domains = await getCurrentTabDomains()
       if(domains && domains.length>0){ showDomainsModal(domains); if(st) st.textContent = '' }
-      else { if(st) st.textContent = 'No domains recorded for this tab' }
-    }catch(e){ if(st) st.textContent = 'Cannot read domains: '+e.message }
+      else { if(st) st.textContent = t('no_domains') }
+    }catch(e){ if(st) st.textContent = t('cannot_read_domains')+e.message }
   }
   // Tabs setup: two separate textareas (current/global)
   const tabCurrent = document.getElementById('tabCurrent')
@@ -684,7 +716,7 @@ window.onload = async ()=>{
       const cur_norm = (cur || '').replace(/\r/g,'')
       const val = validateRoutingText(cur)
       const statusEl = document.getElementById('status')
-      if(!val.ok){ if(statusEl) statusEl.textContent = 'Validation: ' + val.errors.join('; '); saveBtn.disabled = true; return }
+      if(!val.ok){ if(statusEl) statusEl.textContent = t('validation_prefix') + val.errors.join('; '); saveBtn.disabled = true; return }
       else { if(statusEl) statusEl.textContent = '' }
       saveBtn.disabled = (orig_norm === cur_norm)
       try{ updateDiff('current') }catch(e){}
@@ -700,7 +732,7 @@ window.onload = async ()=>{
       try{ storage.set({'draft_rules_global': cur}) }catch(e){}
       const val = validateRoutingText(cur)
       const statusEl = document.getElementById('status')
-      if(!val.ok){ if(statusEl) statusEl.textContent = 'Validation: ' + val.errors.join('; '); saveBtn.disabled = true; return }
+      if(!val.ok){ if(statusEl) statusEl.textContent = t('validation_prefix') + val.errors.join('; '); saveBtn.disabled = true; return }
       else { if(statusEl) statusEl.textContent = '' }
       // compare normalized to avoid CRLF issues
       const orig_norm = (orig || '').replace(/\r/g,'')
@@ -723,7 +755,7 @@ window.onload = async ()=>{
           ta.value = draft
           if(saveBtn) saveBtn.disabled = ( (window.__originalDisplayed_current || '') === draft )
           const st = document.getElementById('status')
-          if(st) st.textContent = 'Restored local draft'
+          if(st) st.textContent = t('restored_local_draft')
           try{ updateDiff('current') }catch(e){}
         }
       }

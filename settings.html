@@ -7,24 +7,35 @@
   <link rel="icon" href="icons/favicon.svg">
 </head>
 <body>
-  <h3>Settings & Auth</h3>
-  <label class="muted">Server URL</label>
+  <h3 data-i18n="settings_title">Settings & Auth</h3>
+  <label class="muted" data-i18n="server_url">Server URL</label>
   <input id="serverUrl" placeholder="http://192.168.1.1:2017" />
   <div id="authInputs">
-    <label class="muted">Username / Password</label>
+    <label class="muted" data-i18n="username_password">Username / Password</label>
     <div class="row">
-      <input id="username" class="small" placeholder="User" />
-      <input id="password" class="small" placeholder="Pass" type="password" />
+      <input id="username" class="small" data-i18n-placeholder="user_placeholder" placeholder="User" />
+      <input id="password" class="small" data-i18n-placeholder="pass_placeholder" placeholder="Pass" type="password" />
     </div>
-    <button style="width: 100%;" id="btnLogin">Login</button>
+    <button style="width: 100%;" id="btnLogin" data-i18n="login">Login</button>
   </div>
   <div id="loggedIn" class="hidden">
-    <div class="muted">Logged as <span id="loggedName"></span></div>
-    <button  style="width: 100%;" id="btnLogout">Logout</button>
+    <div class="muted"><span data-i18n="logged_as">Logged as</span> <span id="loggedName"></span></div>
+    <button  style="width: 100%;" id="btnLogout" data-i18n="logout">Logout</button>
   </div>
   <div id="status" class="muted"></div>
   <hr />
-  <button  style="width: 100%;" id="btnBack">Back</button>
+  <label class="muted" data-i18n="language">Language</label>
+  <div id="langPicker" style="display:flex;gap:8px;margin:8px 0">
+    <button class="lang-btn" data-lang="en" style="display:flex;align-items:center;gap:6px;padding:6px 12px;width:auto">
+      <img src="icons/flag_en.svg" style="width:20px;height:14px" alt="EN"> English
+    </button>
+    <button class="lang-btn" data-lang="ru" style="display:flex;align-items:center;gap:6px;padding:6px 12px;width:auto">
+      <img src="icons/flag_ru.svg" style="width:20px;height:14px" alt="RU"> Русский
+    </button>
+  </div>
+  <hr />
+  <button  style="width: 100%;" id="btnBack" data-i18n="back">Back</button>
+  <script src="i18n.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

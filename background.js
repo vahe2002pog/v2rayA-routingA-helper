@@ -3,6 +3,56 @@
 
 const storage = chrome.storage.local
 
+// --- Background save logic ---
+// Tracks whether a save operation is currently in progress
+let _savingInProgress = false
+
+async function bgCallApi(server, token, path, method='GET', body=null){
+  const headers = {'Content-Type':'application/json'}
+  if(token) headers['Authorization'] = 'Bearer ' + token
+  const opts = {method, headers}
+  if(body) opts.body = JSON.stringify(body)
+  const r = await fetch(server.replace(/\/$/,'') + path, opts)
+  if(!r.ok){ const txt = await r.text(); throw new Error(r.status + ' ' + txt) }
+  return await r.json()
+}
+
+async function bgPutRoutingA(newText, serverUrl, token){
+  const server = serverUrl || 'http://192.168.1.1:2017'
+  const resp = await bgCallApi(server, token, '/api/routingA', 'PUT', {routingA: newText})
+  if(!resp || resp.code !== 'SUCCESS'){
+    const msg = resp && resp.message ? resp.message : 'unknown error'
+    throw new Error('Update failed: ' + msg)
+  }
+  // reload v2ray (best-effort)
+  try{ await bgCallApi(server, token, '/api/v2ray', 'POST', {}) }catch(e){}
+  return true
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse)=>{
+  if(msg && msg.type === 'SAVE_ROUTING'){
+    _savingInProgress = true
+    storage.set({_saveInProgress: true})
+    const {newText, serverUrl, token} = msg
+    bgPutRoutingA(newText, serverUrl, token)
+      .then(()=>{
+        _savingInProgress = false
+        storage.set({_saveInProgress: false})
+        sendResponse({ok: true})
+      })
+      .catch(e=>{
+        _savingInProgress = false
+        storage.set({_saveInProgress: false})
+        sendResponse({ok: false, error: e.message})
+      })
+    return true // keep message channel open for async response
+  }
+  if(msg && msg.type === 'IS_SAVING'){
+    sendResponse({saving: _savingInProgress})
+    return false
+  }
+})
+
 function storeHostForTab(tabId, host){
   if(tabId === undefined || tabId === null || tabId < 0) return
   const keyHost = 'host_for_tab_' + tabId

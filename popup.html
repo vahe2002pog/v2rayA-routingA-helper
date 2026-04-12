@@ -14,37 +14,38 @@
     </div>
     <div class="header-buttons">
       <div>
-        <button id="proxyState" class="header-btn" title="Proxy state">Loading...</button>
+        <button id="proxyState" class="header-btn" title="Proxy state" data-i18n="proxy_loading">Loading...</button>
       </div>
       <div class="header-buttons">
-        <button id="showDomains" class="header-btn" title="Show contacted domains"><img class="icon" src="icons/link-variant-plus.svg" alt="domains"></button>
-        <button id="headerRefresh" class="header-btn" title="Reload"><img class="icon" src="icons/reload.svg" alt="Reload"></button>
-        <button id="openPanel" class="header-btn" title="Open panel"><img class="icon" src="icons/open-in-new.svg" alt="open"></button>
-        <button id="openSettings" class="header-settings-btn" title="Settings"><img class="icon" src="icons/cog.svg" alt="settings"></button>
+        <button id="showDomains" class="header-btn" data-i18n-title="show_domains_title" title="Show contacted domains"><img class="icon" src="icons/link-variant-plus.svg" alt="domains"></button>
+        <button id="headerRefresh" class="header-btn" data-i18n-title="reload_title" title="Reload"><img class="icon" src="icons/reload.svg" alt="Reload"></button>
+        <button id="openPanel" class="header-btn" data-i18n-title="open_panel_title" title="Open panel"><img class="icon" src="icons/open-in-new.svg" alt="open"></button>
+        <button id="openSettings" class="header-settings-btn" data-i18n-title="settings_title_btn" title="Settings"><img class="icon" src="icons/cog.svg" alt="settings"></button>
       </div>
     </div>
   </div>
   <div id="popupRules">
     <div style="margin:6px 0;">
       <div class="tabs" style="margin-top:6px;">
-        <button id="tabCurrent" class="tab active">Current</button>
-        <button id="tabGlobal" class="tab">Global</button>
+        <button id="tabCurrent" class="tab active" data-i18n="tab_current">Current</button>
+        <button id="tabGlobal" class="tab" data-i18n="tab_global">Global</button>
       </div>
     </div>
   <div class="tab-content">
-    <textarea id="rulesAreaCurrent" rows="5" placeholder="site-related rules will appear here"></textarea>
-    <textarea id="rulesAreaGlobal" rows="15" placeholder="full routing config will appear here" style="display:none"></textarea>
+    <textarea id="rulesAreaCurrent" rows="5" data-i18n-placeholder="placeholder_current" placeholder="site-related rules will appear here"></textarea>
+    <textarea id="rulesAreaGlobal" rows="15" data-i18n-placeholder="placeholder_global" placeholder="full routing config will appear here" style="display:none"></textarea>
     <div id="rulesDiff" class="rules-diff" aria-hidden="false"></div>
   </div>
   
   <hr />
   <div class="row">
-      <button id="addDomain">Add current tab</button>
-      <button id="saveRules" class="save" disabled>Save</button>
+      <button id="addDomain" data-i18n="add_current_tab">Add current tab</button>
+      <button id="saveRules" class="save" data-i18n="save" disabled>Save</button>
     </div>
-    <div class="muted">Current host: <span id="currentHost">-</span></div>
+    <div class="muted"><span data-i18n="current_host">Current host:</span> <span id="currentHost">-</span></div>
   <div id="status" class="muted"></div>
   </div>
+  <script src="i18n.js"></script>
   <script src="rules.js"></script>
   <script src="popup_main.js"></script>
 </body>
