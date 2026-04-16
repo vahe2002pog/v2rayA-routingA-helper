@@ -7,7 +7,10 @@
   <link rel="icon" href="icons/favicon.svg">
 </head>
 <body>
-  <h3 data-i18n="settings_title">Settings & Auth</h3>
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <h3 style="margin:0" data-i18n="settings_title">Settings & Auth</h3>
+    <button id="btnBack" class="header-settings-btn" data-i18n-title="back" title="Back"><img class="icon" src="icons/arrow-left.svg" alt="Back"></button>
+  </div>
   <label class="muted" data-i18n="server_url">Server URL</label>
   <input id="serverUrl" placeholder="http://192.168.1.1:2017" />
   <div id="authInputs">
@@ -34,7 +37,20 @@
     </button>
   </div>
   <hr />
-  <button  style="width: 100%;" id="btnBack" data-i18n="back">Back</button>
+  <h3 style="margin-bottom:4px" data-i18n="proxy_browser_section">Browser proxy</h3>
+  <label style="display:flex;align-items:center;gap:6px;margin:4px 0">
+    <input type="checkbox" id="proxyEnabled" style="width:auto;margin:0">
+    <span data-i18n="proxy_browser_enable">Enable browser proxy</span>
+  </label>
+  <div class="row" style="align-items:end;margin:4px 0">
+    <div style="flex:1"><label class="muted" data-i18n="proxy_browser_host">Proxy host</label><input id="proxyHost" placeholder="192.168.1.1" style="margin:2px 0" /></div>
+    <div style="width:80px"><label class="muted" data-i18n="proxy_browser_port">Port</label><input id="proxyPort" placeholder="20171" style="margin:2px 0;width:100%;box-sizing:border-box" /></div>
+  </div>
+  <button id="btnFetchPorts" style="width:100%;padding:7px 10px;margin:4px 0;white-space:nowrap" data-i18n="proxy_fetch_ports">Fetch port from v2rayA</button>
+  <label class="muted" data-i18n="proxy_browser_domains">Proxied domains (one per line)</label>
+  <textarea id="proxyDomains" rows="4" style="width:100%;box-sizing:border-box;margin:2px 0;padding:6px;border-radius:4px;border:1px solid #e6e6e6;font-family:inherit;font-size:12px"></textarea>
+  <button style="width:100%" id="btnSaveProxy" data-i18n="proxy_save">Save proxy settings</button>
+  <div id="proxyStatus" class="muted"></div>
   <script src="i18n.js"></script>
   <script src="settings.js"></script>
 </body>

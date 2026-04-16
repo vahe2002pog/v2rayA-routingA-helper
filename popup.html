@@ -33,7 +33,7 @@
     </div>
   <div class="tab-content">
     <textarea id="rulesAreaCurrent" rows="5" data-i18n-placeholder="placeholder_current" placeholder="site-related rules will appear here"></textarea>
-    <textarea id="rulesAreaGlobal" rows="15" data-i18n-placeholder="placeholder_global" placeholder="full routing config will appear here" style="display:none"></textarea>
+    <textarea id="rulesAreaGlobal" rows="10" data-i18n-placeholder="placeholder_global" placeholder="full routing config will appear here" style="display:none"></textarea>
     <div id="rulesDiff" class="rules-diff" aria-hidden="false"></div>
   </div>
   
@@ -43,6 +43,15 @@
       <button id="saveRules" class="save" data-i18n="save" disabled>Save</button>
     </div>
     <div class="muted"><span data-i18n="current_host">Current host:</span> <span id="currentHost">-</span></div>
+  <hr />
+  <div class="proxy-toggle-row">
+    <span data-i18n="proxy_this_site">Proxy this site</span>
+    <label class="switch">
+      <input id="proxySiteToggle" type="checkbox">
+      <span class="slider"></span>
+    </label>
+  </div>
+  <div id="proxyHint" class="muted"></div>
   <div id="status" class="muted"></div>
   </div>
   <script src="i18n.js"></script>

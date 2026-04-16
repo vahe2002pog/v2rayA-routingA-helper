@@ -64,6 +64,55 @@ window.onload = async ()=>{
     document.getElementById('status').textContent = t('logged_out')
   }
   document.getElementById('btnBack').onclick = ()=>{ location.href = 'popup.html' }
+
+  // --- Browser proxy settings ---
+  function sendMsg(msg){ return new Promise(res=>{ try{ chrome.runtime.sendMessage(msg, r=>res(r)) }catch(e){ res(null) } }) }
+  const proxyEnabled = document.getElementById('proxyEnabled')
+  const proxyHost = document.getElementById('proxyHost')
+  const proxyPort = document.getElementById('proxyPort')
+  const proxyScheme = document.getElementById('proxyScheme')
+  const proxyDomains = document.getElementById('proxyDomains')
+  const proxyStatus = document.getElementById('proxyStatus')
+  const btnSaveProxy = document.getElementById('btnSaveProxy')
+  const btnFetchPorts = document.getElementById('btnFetchPorts')
+
+  async function loadProxy(){
+    const r = await sendMsg({type:'PROXY_GET_CONFIG'})
+    if(!r || !r.ok) return
+    const cfg = r.cfg || {}
+    if(proxyEnabled) proxyEnabled.checked = !!cfg.proxy_enabled
+    if(proxyHost) proxyHost.value = cfg.proxy_host || '192.168.1.1'
+    if(proxyPort) proxyPort.value = cfg.proxy_port || 20171
+    if(proxyScheme) proxyScheme.value = cfg.proxy_scheme || 'http'
+    if(proxyDomains) proxyDomains.value = (cfg.proxy_domains || []).join('\n')
+  }
+  loadProxy()
+
+  if(btnSaveProxy) btnSaveProxy.onclick = async ()=>{
+    const domains = (proxyDomains.value || '')
+      .split(/\r?\n/).map(s=>s.trim().toLowerCase()).filter(Boolean)
+    const patch = {
+      proxy_enabled: !!proxyEnabled.checked,
+      proxy_host: (proxyHost.value || '192.168.1.1').trim(),
+      proxy_port: parseInt(proxyPort.value, 10) || 20171,
+      proxy_scheme: proxyScheme.value || 'http',
+      proxy_domains: domains
+    }
+    const r = await sendMsg({type:'PROXY_SET_CONFIG', patch})
+    if(proxyStatus) proxyStatus.textContent = (r && r.ok) ? t('proxy_saved') : ''
+  }
+
+  if(btnFetchPorts) btnFetchPorts.onclick = async ()=>{
+    if(proxyStatus) proxyStatus.textContent = '...'
+    const r = await sendMsg({type:'PROXY_FETCH_PORTS'})
+    if(!r || !r.ok){ if(proxyStatus) proxyStatus.textContent = (t('proxy_fetch_failed') || 'Fetch failed: ') + ((r && r.error) || 'unknown'); return }
+    const data = r.data || {}
+    const port = data.http || 0
+    if(!port){ if(proxyStatus) proxyStatus.textContent = t('proxy_no_ports') || 'No inbound ports available'; return }
+    if(proxyScheme) proxyScheme.value = 'http'
+    if(proxyPort) proxyPort.value = port
+    if(proxyStatus) proxyStatus.textContent = (t('proxy_fetch_ok') || 'Port: ') + 'HTTP ' + port
+  }
   // Language picker
   const langBtns = document.querySelectorAll('.lang-btn')
   function setActiveLang(lang){

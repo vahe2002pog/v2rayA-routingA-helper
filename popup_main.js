@@ -32,20 +32,25 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
 		// Proxy state button: fetch /api/touch and show status; allow toggle
 		const proxyBtn = document.getElementById('proxyState')
+		function fetchWithTimeout(url, opts, ms){
+			const ctrl = new AbortController()
+			const timer = setTimeout(()=> ctrl.abort(), ms)
+			return fetch(url, {...opts, signal: ctrl.signal}).finally(()=> clearTimeout(timer))
+		}
 		async function updateProxyState(){
 			if(!proxyBtn) return
-			if(!proxyBtn.textContent || proxyBtn.textContent.trim() === '') proxyBtn.textContent = t('proxy_loading')
+			proxyBtn.classList.remove('btn-neutral')
 			try{
-				if(typeof getServer !== 'function' || typeof callApi !== 'function'){
-					proxyBtn.textContent = t('proxy_loading')
-					proxyBtn.dataset.state = 'stopped'
-					return
-				}
+				if(typeof getServer !== 'function') throw new Error('no getServer')
 				const s = await getServer()
-				const server = s.serverUrl || 'http://192.168.1.1:2017'
+				const server = (s.serverUrl || 'http://192.168.1.1:2017').replace(/\/$/,'')
 				const token = s.token
-				const resp = await callApi(server, token, '/api/touch', 'GET')
-				if(!resp || resp.code !== 'SUCCESS' || !resp.data){ proxyBtn.textContent = t('proxy_loading'); proxyBtn.dataset.state = 'stopped'; return }
+				const headers = {'Content-Type':'application/json'}
+				if(token) headers['Authorization'] = 'Bearer ' + token
+				const r = await fetchWithTimeout(server + '/api/touch', {method:'GET', headers}, 4000)
+				if(!r.ok) throw new Error(r.status)
+				const resp = await r.json()
+				if(!resp || resp.code !== 'SUCCESS' || !resp.data) throw new Error('no data')
 				const running = !!resp.data.running
 				const touch = resp.data.touch || {}
 				const connected = (touch.connectedServers && touch.connectedServers.length) ? touch.connectedServers.length : (touch.connectedServer ? touch.connectedServer.length : 0)
@@ -56,7 +61,13 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 				proxyBtn.classList.remove('state-working','state-ready','state-starting')
 				if(isWorking) proxyBtn.classList.add('state-working')
 				else proxyBtn.classList.add('state-ready')
-			}catch(e){ proxyBtn.textContent = t('proxy_loading'); proxyBtn.dataset.state = 'stopped' }
+			}catch(e){
+				proxyBtn.textContent = t('proxy_ready')
+				proxyBtn.dataset.state = 'stopped'
+				proxyBtn.dataset.label = 'ready'
+				proxyBtn.classList.remove('state-working','state-ready','state-starting')
+				proxyBtn.classList.add('state-ready')
+			}
 		}
 		if(proxyBtn){ proxyBtn.addEventListener('click', async ()=>{
 			// show loader on click
@@ -93,6 +104,56 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 		// initial update
 		updateProxyState()
 		}
+
+		// --- Per-site proxy switch ---
+		const proxySiteToggle = document.getElementById('proxySiteToggle')
+		const proxyHint = document.getElementById('proxyHint')
+
+		function sendMsg(msg){
+			return new Promise(res=>{ try{ chrome.runtime.sendMessage(msg, r=>res(r)) }catch(e){ res(null) } })
+		}
+
+		async function refreshProxyUi(){
+			if(!proxySiteToggle) return
+			let host = ''
+			try{ if(typeof getCurrentTabHost === 'function') host = await getCurrentTabHost() }catch(e){}
+			const r = await sendMsg({type:'PROXY_GET_CONFIG'})
+			const cfg = (r && r.cfg) || {}
+			const list = Array.isArray(cfg.proxy_domains) ? cfg.proxy_domains : []
+			const hLow = String(host || '').toLowerCase().replace(/^www\./, '')
+			const inList = !!host && list.some(d=>{
+				const dd = String(d || '').trim().toLowerCase()
+				return dd && (hLow === dd || hLow.endsWith('.' + dd))
+			})
+			proxySiteToggle.dataset.host = host || ''
+			proxySiteToggle.checked = !!inList
+			proxySiteToggle.disabled = !host
+			if(proxyHint){
+				if(!host) proxyHint.textContent = t('proxy_hint_no_host') || ''
+				else if(!cfg.proxy_enabled && inList) proxyHint.textContent = t('proxy_hint_disabled') || ''
+				else if(inList) proxyHint.textContent = (t('proxy_via') || 'via') + ' ' + cfg.proxy_host + ':' + cfg.proxy_port
+				else proxyHint.textContent = ''
+			}
+		}
+
+		if(proxySiteToggle){
+			proxySiteToggle.addEventListener('change', async ()=>{
+				const host = proxySiteToggle.dataset.host
+				if(!host){ proxySiteToggle.checked = false; return }
+				proxySiteToggle.disabled = true
+				const r = await sendMsg({type:'PROXY_TOGGLE_DOMAIN', host})
+				proxySiteToggle.disabled = false
+				const status = document.getElementById('status')
+				if(r && r.ok){
+					if(status) status.textContent = r.added ? (t('proxy_site_added') || '') : (t('proxy_site_removed') || '')
+					try{ chrome.tabs.query({active:true,currentWindow:true}, tabs=>{ if(tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id) }) }catch(e){}
+				} else {
+					proxySiteToggle.checked = !proxySiteToggle.checked
+				}
+				await refreshProxyUi()
+			})
+		}
+		refreshProxyUi()
 
 		// open panel button
 		const openPanel = document.getElementById('openPanel')

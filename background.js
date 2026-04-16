@@ -29,7 +29,297 @@ async function bgPutRoutingA(newText, serverUrl, token){
   return true
 }
 
+// --- Browser proxy management ---
+// Model:
+// - proxy_enabled: master switch
+// - proxy_domains: hostnames (and their subdomains) that should go through v2rayA
+// - PAC routes matching hosts through proxy, everything else DIRECT
+// - v2rayA server host is always DIRECT so the extension can reach its API
+const PROXY_DEFAULTS = {
+  proxy_enabled: true,
+  proxy_host: '192.168.1.1',
+  proxy_port: 20171,
+  proxy_scheme: 'http',
+  proxy_domains: []
+}
+
+function getProxyConfig(){
+  return new Promise(res=>storage.get(Object.keys(PROXY_DEFAULTS), r=>{
+    const cfg = {}
+    for(const k of Object.keys(PROXY_DEFAULTS)){
+      cfg[k] = (r && r[k] !== undefined && r[k] !== null) ? r[k] : PROXY_DEFAULTS[k]
+    }
+    if(!Array.isArray(cfg.proxy_domains)) cfg.proxy_domains = []
+    res(cfg)
+  }))
+}
+
+function parseServerHost(serverUrl){
+  try{ return new URL(serverUrl).hostname.toLowerCase() }catch(e){ return '' }
+}
+
+function normalizeDomain(raw){
+  let s = String(raw || '').trim().toLowerCase()
+  if(!s) return ''
+  // strip scheme
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+  // strip path / query / fragment
+  s = s.split('/')[0].split('?')[0].split('#')[0]
+  // strip port
+  s = s.split(':')[0]
+  // strip leading www.
+  if(s.startsWith('www.')) s = s.substring(4)
+  return s
+}
+
+// Reduce hostname to its registrable (base) domain using a small list of
+// well-known multi-label TLDs. Not a full PSL, but covers common cases so
+// that toggling from a subdomain proxies the whole eTLD+1 and all siblings.
+const MULTI_PART_TLDS = new Set([
+  'co.uk','org.uk','gov.uk','ac.uk','me.uk','net.uk',
+  'com.ua','net.ua','org.ua','co.ua','biz.ua','in.ua',
+  'com.ru','net.ru','org.ru','pp.ru',
+  'com.au','net.au','org.au','edu.au','gov.au','id.au',
+  'co.jp','ne.jp','or.jp','ac.jp','go.jp',
+  'com.br','net.br','org.br',
+  'co.kr','ne.kr','or.kr',
+  'com.cn','net.cn','org.cn','gov.cn','edu.cn','ac.cn',
+  'co.in','net.in','org.in','gen.in',
+  'com.tr','net.tr','org.tr',
+  'com.mx','com.ar','com.co','com.pe','com.ve',
+  'co.il','co.za','co.nz','co.id','co.th',
+])
+
+function baseDomain(host){
+  const h = normalizeDomain(host)
+  if(!h) return ''
+  if(/^(\d+\.){3}\d+$/.test(h)) return h
+  const parts = h.split('.')
+  if(parts.length <= 2) return h
+  const last2 = parts.slice(-2).join('.')
+  if(MULTI_PART_TLDS.has(last2) && parts.length >= 3){
+    return parts.slice(-3).join('.')
+  }
+  return last2
+}
+
+// === Dynamic proxy: contacted domains of proxied tabs are also proxied ===
+const _tabMainHost = new Map()   // tabId -> normalized main host
+const _tabDynDomains = new Map() // tabId -> Set<normalized domain>
+let _cachedProxyDomains = []     // sync cache of proxy_domains
+
+function isHostMatchList(host, list){
+  const h = normalizeDomain(host)
+  if(!h) return false
+  return list.some(d=>{
+    const dd = normalizeDomain(d)
+    return dd && (h === dd || h.endsWith('.' + dd))
+  })
+}
+
+function getAllDynamicDomains(){
+  const all = new Set()
+  for(const [,domains] of _tabDynDomains){
+    for(const d of domains) all.add(d)
+  }
+  return [...all]
+}
+
+let _applyTimer = null
+function scheduleApplyProxy(){
+  if(_applyTimer) return
+  _applyTimer = setTimeout(()=>{
+    _applyTimer = null
+    applyProxy()
+  }, 300)
+}
+
+// Persist associated domains per proxied host: proxy_assoc_<baseDomain> = [...]
+function loadDynDomainsForHost(mainHost){
+  return new Promise(res=>{
+    const base = baseDomain(mainHost)
+    if(!base){ res([]); return }
+    const key = 'proxy_assoc_' + base
+    storage.get([key], r=>{ res((r && Array.isArray(r[key])) ? r[key] : []) })
+  })
+}
+
+const _saveDynTimers = new Map()
+function scheduleSaveDynDomains(mainHost, domains){
+  const base = baseDomain(mainHost)
+  if(!base) return
+  if(_saveDynTimers.has(base)) return
+  _saveDynTimers.set(base, setTimeout(()=>{
+    _saveDynTimers.delete(base)
+    storage.set({['proxy_assoc_' + base]: [...domains]})
+  }, 1000))
+}
+
+async function initDynamicDomains(){
+  try{
+    const cfg = await getProxyConfig()
+    _cachedProxyDomains = cfg.proxy_domains || []
+    const tabs = await chrome.tabs.query({})
+    for(const tab of tabs){
+      if(tab.id >= 0 && tab.url){
+        try{
+          const host = normalizeDomain(new URL(tab.url).hostname)
+          if(host) _tabMainHost.set(tab.id, host)
+          if(host && isHostMatchList(host, _cachedProxyDomains)){
+            const saved = await loadDynDomainsForHost(host)
+            if(saved.length) _tabDynDomains.set(tab.id, new Set(saved.map(normalizeDomain).filter(Boolean)))
+          }
+        }catch(e){}
+      }
+    }
+  }catch(e){}
+  applyProxy()
+}
+
+function buildPac(cfg, serverHost, dynamicDomains){
+  const scheme = 'PROXY'
+  const host = String(cfg.proxy_host).replace(/"/g,'')
+  const port = parseInt(cfg.proxy_port, 10)
+  const proxyStr = scheme + ' ' + host + ':' + port
+  const allSet = new Set([
+    ...(cfg.proxy_domains || []).map(normalizeDomain).filter(Boolean),
+    ...(dynamicDomains || []).map(normalizeDomain).filter(Boolean)
+  ])
+  const domains = [...allSet]
+  const bypass = [serverHost, cfg.proxy_host, 'localhost', '127.0.0.1']
+    .map(x => String(x || '').toLowerCase()).filter(Boolean)
+  // Note: no DIRECT fallback for matched domains — if proxy is unreachable
+  // request fails instead of silently leaking the real IP.
+  return [
+    'function FindProxyForURL(url, host){',
+    '  var h = (host||"").toLowerCase();',
+    '  var bypass = ' + JSON.stringify(bypass) + ';',
+    '  for(var i=0;i<bypass.length;i++){ if(h === bypass[i]) return "DIRECT"; }',
+    '  if(/^(\\d+\\.){3}\\d+$/.test(h)){ return "DIRECT"; }',
+    '  var nh = h.indexOf("www.") === 0 ? h.substring(4) : h;',
+    '  var domains = ' + JSON.stringify(domains) + ';',
+    '  for(var j=0;j<domains.length;j++){',
+    '    var d = domains[j];',
+    '    if(!d) continue;',
+    '    if(nh === d || nh.endsWith("." + d) || h === d || h.endsWith("." + d)) return "' + proxyStr + '";',
+    '  }',
+    '  return "DIRECT";',
+    '}'
+  ].join('\n')
+}
+
+async function applyProxy(){
+  try{
+    if(!chrome.proxy || !chrome.proxy.settings){
+      console.warn('[v2rayA] chrome.proxy not available')
+      return
+    }
+    const cfg = await getProxyConfig()
+    const s = await new Promise(res=>storage.get(['serverUrl'], res))
+    const serverHost = parseServerHost(s.serverUrl || 'http://192.168.1.1:2017')
+    const dynamicDomains = getAllDynamicDomains()
+    if(!cfg.proxy_enabled || (!cfg.proxy_domains.length && !dynamicDomains.length)){
+      chrome.proxy.settings.clear({scope: 'regular'}, ()=>{
+        if(chrome.runtime.lastError) console.warn('[v2rayA] proxy.clear error:', chrome.runtime.lastError.message)
+        else console.log('[v2rayA] proxy cleared')
+      })
+      return
+    }
+    const pac = buildPac(cfg, serverHost, dynamicDomains)
+    const value = { mode: 'pac_script', pacScript: { data: pac, mandatory: false } }
+    chrome.proxy.settings.set({value, scope: 'regular'}, ()=>{
+      if(chrome.runtime.lastError) console.warn('[v2rayA] proxy.set error:', chrome.runtime.lastError.message)
+      else console.log('[v2rayA] proxy applied:', cfg.proxy_scheme + '://' + cfg.proxy_host + ':' + cfg.proxy_port, 'domains:', cfg.proxy_domains, 'dynamic:', dynamicDomains)
+    })
+  }catch(e){ console.warn('[v2rayA] applyProxy error:', e) }
+}
+
+async function bgFetchPorts(){
+  const s = await new Promise(res=>storage.get(['serverUrl','token'], res))
+  const server = s.serverUrl || 'http://192.168.1.1:2017'
+  const resp = await bgCallApi(server, s.token, '/api/ports', 'GET')
+  if(!resp || resp.code !== 'SUCCESS') throw new Error((resp && resp.message) || 'fetch failed')
+  return resp.data || {}
+}
+
+// Re-apply on startup (with dynamic domain init) and when relevant storage keys change
+initDynamicDomains()
+try{
+  chrome.storage.onChanged.addListener((changes, area)=>{
+    if(area !== 'local') return
+    if('proxy_domains' in changes){
+      _cachedProxyDomains = changes.proxy_domains.newValue || []
+      // re-evaluate which tabs are dynamically proxied
+      for(const [tabId, mainHost] of _tabMainHost){
+        if(isHostMatchList(mainHost, _cachedProxyDomains)){
+          if(!_tabDynDomains.has(tabId)) _tabDynDomains.set(tabId, new Set())
+        } else {
+          _tabDynDomains.delete(tabId)
+        }
+      }
+    }
+    if('serverUrl' in changes){ applyProxy(); return }
+    for(const k of Object.keys(PROXY_DEFAULTS)){
+      if(k in changes){ applyProxy(); return }
+    }
+  })
+}catch(e){}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse)=>{
+  if(msg && msg.type === 'PROXY_GET_CONFIG'){
+    getProxyConfig().then(cfg=>sendResponse({ok:true, cfg})).catch(e=>sendResponse({ok:false, error:e.message}))
+    return true
+  }
+  if(msg && msg.type === 'PROXY_SET_CONFIG'){
+    const patch = msg.patch || {}
+    const clean = {}
+    for(const k of Object.keys(PROXY_DEFAULTS)){
+      if(k in patch) clean[k] = patch[k]
+    }
+    if('proxy_domains' in clean && Array.isArray(clean.proxy_domains)){
+      clean.proxy_domains = clean.proxy_domains.map(normalizeDomain).filter(Boolean)
+    }
+    if('proxy_host' in clean) clean.proxy_host = String(clean.proxy_host || '').trim()
+    storage.set(clean, ()=>{ applyProxy().then(()=>sendResponse({ok:true})) })
+    return true
+  }
+  if(msg && msg.type === 'PROXY_TOGGLE_DOMAIN'){
+    const host = baseDomain(msg.host)
+    if(!host){ sendResponse({ok:false, error:'empty host'}); return false }
+    getProxyConfig().then(cfg=>{
+      const list = Array.isArray(cfg.proxy_domains) ? cfg.proxy_domains.slice() : []
+      // a host is considered "already on" if stored domain matches or is a parent
+      const matchIdx = list.findIndex(d=>{
+        const dd = normalizeDomain(d)
+        return dd === host || host.endsWith('.' + dd)
+      })
+      let added
+      if(matchIdx >= 0){
+        list.splice(matchIdx,1); added = false
+        // clean up saved associated domains
+        try{ storage.remove(['proxy_assoc_' + baseDomain(host)]) }catch(e){}
+      } else { list.push(host); added = true }
+      storage.set({proxy_domains: list}, ()=>{ applyProxy().then(()=>sendResponse({ok:true, added, list, host})) })
+    })
+    return true
+  }
+  if(msg && msg.type === 'PROXY_DEBUG'){
+    (async ()=>{
+      const cfg = await getProxyConfig()
+      const s = await new Promise(res=>storage.get(['serverUrl'], res))
+      const serverHost = parseServerHost(s.serverUrl || 'http://192.168.1.1:2017')
+      const pac = buildPac(cfg, serverHost)
+      const settings = await new Promise(res=>{
+        try{ chrome.proxy.settings.get({}, v=>res(v)) }catch(e){ res({error:e.message}) }
+      })
+      sendResponse({ok:true, cfg, serverHost, pac, settings})
+    })()
+    return true
+  }
+  if(msg && msg.type === 'PROXY_FETCH_PORTS'){
+    bgFetchPorts().then(data=>sendResponse({ok:true, data})).catch(e=>sendResponse({ok:false, error:e.message}))
+    return true
+  }
   if(msg && msg.type === 'SAVE_ROUTING'){
     _savingInProgress = true
     storage.set({_saveInProgress: true})
@@ -83,6 +373,42 @@ chrome.webRequest.onBeforeRequest.addListener(
       const url = new URL(details.url)
       const host = url.hostname
       if(host) storeHostForTab(tabId, host)
+
+      // --- Dynamic proxy tracking ---
+      const normalized = normalizeDomain(host)
+      if(!normalized) return
+      if(details.type === 'main_frame'){
+        _tabMainHost.set(tabId, normalized)
+        const hadDyn = _tabDynDomains.has(tabId) && _tabDynDomains.get(tabId).size > 0
+        _tabDynDomains.delete(tabId)
+        if(isHostMatchList(normalized, _cachedProxyDomains)){
+          _tabDynDomains.set(tabId, new Set())
+          // pre-load saved associated domains so they're proxied from the start
+          loadDynDomainsForHost(normalized).then(saved=>{
+            const set = _tabDynDomains.get(tabId)
+            if(!set) return
+            let changed = false
+            for(const d of saved){
+              const nd = normalizeDomain(d)
+              if(nd && !set.has(nd)){ set.add(nd); changed = true }
+            }
+            if(changed) scheduleApplyProxy()
+          })
+        } else if(hadDyn){
+          scheduleApplyProxy()
+        }
+      }
+      // If tab's main host is in proxy list, add contacted domain dynamically
+      if(_tabDynDomains.has(tabId)){
+        const dynSet = _tabDynDomains.get(tabId)
+        if(!dynSet.has(normalized)){
+          dynSet.add(normalized)
+          scheduleApplyProxy()
+          // persist for future visits
+          const mainHost = _tabMainHost.get(tabId)
+          if(mainHost) scheduleSaveDynDomains(mainHost, dynSet)
+        }
+      }
     }catch(e){ }
   },
   { urls: ["<all_urls>"] }
@@ -152,6 +478,11 @@ cleanupStaleTabData()
 // Clean up stored host and domains when tab is removed to avoid stale entries
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   try{ storage.remove(['host_for_tab_' + tabId, 'domains_for_tab_' + tabId, 'domain_stats_for_tab_' + tabId]) }catch(e){}
+  _tabMainHost.delete(tabId)
+  if(_tabDynDomains.has(tabId)){
+    _tabDynDomains.delete(tabId)
+    scheduleApplyProxy()
+  }
 })
 
 // Helpers to track per-domain stats per tab

@@ -156,7 +156,7 @@ async function enterGlobalMode(){
   const status = document.getElementById('status')
   window.__preGlobalDisplayed = (ta && ta.value) ? ta.value : ''
   window.__activeTab = 'global'
-  if(ta) ta.rows = 15
+  if(ta) ta.rows = 11
   try{
     const s = await getServer()
     const resp = await callApi(s.serverUrl||'http://192.168.1.1:2017', s.token, '/api/routingA', 'GET')
