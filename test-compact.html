@@ -29,60 +29,60 @@
       { name: 'empty input', input: '' },
       { name: 'only comments (no blocks) — untouched', input: '# header\n# another comment\n' },
       { name: 'no markers — rules outside blocks left alone', input:
-        'domain(a.com)->proxy\n' +
-        'domain(b.com)->proxy\n' +
+        'domain(alpha.example)->proxy\n' +
+        'domain(beta.example)->proxy\n' +
         'ip(8.8.8.8)->direct\n'
       },
       { name: 'single block collapsed and markers removed', input:
-        '# domain: chatgpt.com\n' +
-        'domain(chatgpt.com)->proxy\n' +
-        'domain(chat.openai.com)->proxy\n' +
-        '# end domain: chatgpt.com\n'
+        '# domain: example.com\n' +
+        'domain(example.com)->proxy\n' +
+        'domain(api.example.com)->proxy\n' +
+        '# end domain: example.com\n'
       },
       { name: 'multiple blocks, mixed with loose rules', input:
         'domain(loose.example)->proxy\n' +
-        '# domain: chatgpt.com\n' +
-        'domain(chatgpt.com)->proxy\n' +
-        'domain(chat.openai.com)->proxy\n' +
-        '# end domain: chatgpt.com\n' +
-        '# domain: github.com\n' +
-        'domain(github.com)->proxy\n' +
-        'domain(api.github.com)->direct\n' +
-        '# end domain: github.com\n' +
+        '# domain: example.com\n' +
+        'domain(example.com)->proxy\n' +
+        'domain(api.example.com)->proxy\n' +
+        '# end domain: example.com\n' +
+        '# domain: sample.test\n' +
+        'domain(sample.test)->proxy\n' +
+        'domain(api.sample.test)->direct\n' +
+        '# end domain: sample.test\n' +
         'ip(1.1.1.1)->direct\n'
       },
       { name: 'block already compacted (idempotent)', input:
-        '# domain: chatgpt.com\n' +
-        'domain(chatgpt.com, chat.openai.com)->proxy\n' +
-        '# end domain: chatgpt.com\n'
+        '# domain: example.com\n' +
+        'domain(example.com, api.example.com)->proxy\n' +
+        '# end domain: example.com\n'
       },
       { name: 'duplicates inside one block', input:
-        '# domain: foo.com\n' +
-        'domain(foo.com)->proxy\n' +
-        'domain(FOO.com)->proxy\n' +
-        'domain(bar.foo.com)->proxy\n' +
-        'domain(foo.com)->proxy\n' +
-        '# end domain: foo.com\n'
+        '# domain: duplicate.test\n' +
+        'domain(duplicate.test)->proxy\n' +
+        'domain(DUPLICATE.test)->proxy\n' +
+        'domain(api.duplicate.test)->proxy\n' +
+        'domain(duplicate.test)->proxy\n' +
+        '# end domain: duplicate.test\n'
       },
       { name: 'block with ip(...) and prefixed tokens — preserved as-is, simple ones merged', input:
-        '# domain: site.io\n' +
-        'domain(site.io)->proxy\n' +
+        '# domain: mixed.example\n' +
+        'domain(mixed.example)->proxy\n' +
         'ip(1.2.3.4)->direct\n' +
         'domain(geosite:private)->direct\n' +
-        'domain(api.site.io)->proxy\n' +
-        '# end domain: site.io\n'
+        'domain(api.mixed.example)->proxy\n' +
+        '# end domain: mixed.example\n'
       },
       { name: 'block without matching end marker — left alone', input:
-        '# domain: orphan.com\n' +
-        'domain(orphan.com)->proxy\n' +
-        'domain(other.com)->proxy\n'
+        '# domain: orphan.example\n' +
+        'domain(orphan.example)->proxy\n' +
+        'domain(other.example)->proxy\n'
       },
       { name: 'comment inside block preserved before compacted line', input:
-        '# domain: x.com\n' +
+        '# domain: commented.example\n' +
         '# note: temporary\n' +
-        'domain(x.com)->proxy\n' +
-        'domain(y.x.com)->proxy\n' +
-        '# end domain: x.com\n'
+        'domain(commented.example)->proxy\n' +
+        'domain(api.commented.example)->proxy\n' +
+        '# end domain: commented.example\n'
       },
     ]
 
