@@ -6,52 +6,90 @@
   <link rel="stylesheet" href="popup.css">
   <link rel="icon" href="icons/favicon.svg">
 </head>
-<body>
-  <div style="display:flex;align-items:center;justify-content:space-between">
-    <h3 style="margin:0" data-i18n="settings_title">Settings & Auth</h3>
-    <button id="btnBack" class="header-settings-btn" data-i18n-title="back" title="Back"><img class="icon" src="icons/arrow-left.svg" alt="Back"></button>
+<body class="settings-page">
+  <div class="settings-header">
+    <h3 class="settings-title" data-i18n="settings_title">Settings & Auth</h3>
+    <button id="btnBack" class="header-settings-btn" data-i18n-title="back" title="Back">
+      <img class="icon" src="icons/arrow-left.svg" alt="Back">
+    </button>
   </div>
-  <label class="muted" data-i18n="server_url">Server URL</label>
-  <input id="serverUrl" placeholder="http://192.168.1.1:2017" />
-  <div id="authInputs">
+
+  <section class="settings-section">
+    <label class="muted" data-i18n="server_url">Server URL</label>
+    <input id="serverUrl" class="settings-input" placeholder="http://192.168.1.1:2017">
+  </section>
+
+  <section id="authInputs" class="settings-section">
     <label class="muted" data-i18n="username_password">Username / Password</label>
     <div class="row">
-      <input id="username" class="small" data-i18n-placeholder="user_placeholder" placeholder="User" />
-      <input id="password" class="small" data-i18n-placeholder="pass_placeholder" placeholder="Pass" type="password" />
+      <input id="username" class="small settings-input" data-i18n-placeholder="user_placeholder" placeholder="User">
+      <input id="password" class="small settings-input" data-i18n-placeholder="pass_placeholder" placeholder="Pass" type="password">
     </div>
-    <button style="width: 100%;" id="btnLogin" data-i18n="login">Login</button>
-  </div>
-  <div id="loggedIn" class="hidden">
+    <button class="settings-wide-btn" id="btnLogin" data-i18n="login">Login</button>
+  </section>
+
+  <section id="loggedIn" class="hidden settings-section">
     <div class="muted"><span data-i18n="logged_as">Logged as</span> <span id="loggedName"></span></div>
-    <button  style="width: 100%;" id="btnLogout" data-i18n="logout">Logout</button>
-  </div>
+    <button class="settings-wide-btn" id="btnLogout" data-i18n="logout">Logout</button>
+  </section>
   <div id="status" class="muted"></div>
-  <hr />
-  <label class="muted" data-i18n="language">Language</label>
-  <div id="langPicker" style="display:flex;gap:8px;margin:8px 0">
-    <button class="lang-btn" data-lang="en" style="display:flex;align-items:center;gap:6px;padding:6px 12px;width:auto">
-      <img src="icons/flag_en.svg" style="width:20px;height:14px" alt="EN"> English
-    </button>
-    <button class="lang-btn" data-lang="ru" style="display:flex;align-items:center;gap:6px;padding:6px 12px;width:auto">
-      <img src="icons/flag_ru.svg" style="width:20px;height:14px" alt="RU"> Русский
-    </button>
-  </div>
-  <hr />
-  <h3 style="margin-bottom:4px" data-i18n="proxy_browser_section">Browser proxy</h3>
-  <label style="display:flex;align-items:center;gap:6px;margin:4px 0">
-    <input type="checkbox" id="proxyEnabled" style="width:auto;margin:0">
-    <span data-i18n="proxy_browser_enable">Enable browser proxy</span>
-  </label>
-  <div class="row" style="align-items:end;margin:4px 0">
-    <div style="flex:1"><label class="muted" data-i18n="proxy_browser_host">Proxy host</label><input id="proxyHost" placeholder="192.168.1.1" style="margin:2px 0" /></div>
-    <div style="width:80px"><label class="muted" data-i18n="proxy_browser_port">Port</label><input id="proxyPort" placeholder="20171" style="margin:2px 0;width:100%;box-sizing:border-box" /></div>
-  </div>
-  <button id="btnFetchPorts" style="width:100%;padding:7px 10px;margin:4px 0;white-space:nowrap" data-i18n="proxy_fetch_ports">Fetch port from v2rayA</button>
-  <label class="muted" data-i18n="proxy_browser_domains">Proxied domains (one per line)</label>
-  <textarea id="proxyDomains" rows="4" style="width:100%;box-sizing:border-box;margin:2px 0;padding:6px;border-radius:4px;border:1px solid #e6e6e6;font-family:inherit;font-size:12px"></textarea>
-  <button style="width:100%" id="btnSaveProxy" data-i18n="proxy_save">Save proxy settings</button>
-  <div id="proxyStatus" class="muted"></div>
+
+  <hr class="settings-rule">
+
+  <section class="settings-section">
+    <label class="muted" data-i18n="language">Language</label>
+    <div id="langPicker" class="settings-lang-row">
+      <button class="lang-btn settings-lang-btn" data-lang="en">
+        <img src="icons/flag_en.svg" class="settings-flag" alt="EN"> English
+      </button>
+      <button class="lang-btn settings-lang-btn" data-lang="ru">
+        <img src="icons/flag_ru.svg" class="settings-flag" alt="RU"> Russian
+      </button>
+    </div>
+  </section>
+
+  <hr class="settings-rule">
+
+  <section class="settings-section settings-proxy">
+    <h3 class="settings-subtitle" data-i18n="proxy_browser_section">Browser proxy</h3>
+    <label class="settings-check">
+      <input type="checkbox" id="proxyEnabled">
+      <span data-i18n="proxy_browser_enable">Enable browser proxy</span>
+    </label>
+
+    <div class="settings-proxy-grid">
+      <div class="settings-host-field">
+        <label class="muted" data-i18n="proxy_browser_host">Proxy host</label>
+        <input id="proxyHost" class="settings-input" placeholder="192.168.1.1">
+      </div>
+      <div>
+        <label class="muted" data-i18n="proxy_browser_port">Port</label>
+        <input id="proxyPort" class="settings-input" placeholder="20171">
+      </div>
+      <div>
+        <label class="muted" data-i18n="proxy_browser_scheme">Protocol</label>
+        <select id="proxyScheme" class="settings-select">
+          <option value="http">HTTP</option>
+          <option value="socks5">SOCKS5</option>
+          <option value="socks4">SOCKS4</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="btnFetchPorts" class="settings-wide-btn" data-i18n="proxy_fetch_ports">Fetch port from v2rayA</button>
+    <label class="muted" data-i18n="proxy_browser_domains">Proxied domains (one per line)</label>
+    <textarea id="proxyDomains" class="settings-textarea" rows="3"></textarea>
+    <button class="settings-wide-btn" id="btnSaveProxy" data-i18n="proxy_save">Save proxy settings</button>
+    <div id="proxyStatus" class="muted"></div>
+  </section>
+
+  <hr class="settings-rule">
+
+  <button class="settings-wide-btn" id="btnCompactRules" data-i18n="compact_rules">Compact rules</button>
+  <div id="compactStatus" class="muted"></div>
+
   <script src="i18n.js"></script>
+  <script src="compact.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

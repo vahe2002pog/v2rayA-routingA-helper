@@ -69,7 +69,6 @@ function matchesHost(line, host){
   if(line.trim().startsWith('#')) return false
   const l = line.toLowerCase()
   const h = host.toLowerCase()
-  if(l.includes(h)) return true
   // match domain(...) rules: extract inside parentheses
   const m = l.match(/domain\(([^)]+)\)/)
   if(m && m[1]){
@@ -80,7 +79,6 @@ function matchesHost(line, host){
       if(t === h) return true
       if(t.endsWith('.' + h)) return true
       if(h.endsWith('.' + t)) return true
-      if(t.includes(h)) return true
     }
   }
   return false
@@ -210,12 +208,35 @@ async function addDomainToRouting(host){
   const targetId = (window.__activeTab === 'global') ? 'rulesAreaGlobal' : 'rulesAreaCurrent'
   const ta = document.getElementById(targetId)
   if(!ta){ if(status) status.textContent = t('no_host'); return }
-  const rule = `domain(${host})->proxy`
-  // preserve existing whitespace; only trim for duplicate detection
+  const action = 'proxy'
+  const hostLc = (host || '').toLowerCase()
   const lines = ta.value === '' ? [] : ta.value.split('\n')
-  const exists = lines.some(l => (l || '').trim() === rule)
-  if(exists){ if(status) status.textContent = t('rule_already'); return }
-  lines.push(rule)
+  const escHost = hostLc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // duplicate detection: check whether host already appears in any domain(...) rule
+  const containsHostRe = new RegExp('(?:^|[\\s,(])' + escHost + '(?:[\\s,)]|$)', 'i')
+  for(const l of lines){
+    const m = (l || '').match(/domain\(([^)]*)\)/i)
+    if(!m) continue
+    const inner = m[1] || ''
+    if(containsHostRe.test(inner)){ if(status) status.textContent = t('rule_already'); return }
+  }
+  // try to find an existing line with the same action and append the host into its list
+  const sameActionRe = new RegExp('^(\\s*)domain\\(([^)]*)\\)\\s*->\\s*' + action + '\\s*$', 'i')
+  let merged = false
+  for(let i = 0; i < lines.length; i++){
+    const m = lines[i].match(sameActionRe)
+    if(!m) continue
+    const existing = (m[2] || '').split(',').map(s=>s.trim()).filter(Boolean)
+    // skip lines that already use prefixed tokens (geosite:, domain:, full:, ...)
+    // because RoutingA refuses mixing them with plain domains in one group
+    if(existing.some(tok => tok.includes(':'))) continue
+    const indent = m[1] || ''
+    existing.push(hostLc)
+    lines[i] = `${indent}domain(${existing.join(', ')})->${action}`
+    merged = true
+    break
+  }
+  if(!merged) lines.push(`domain(${hostLc})->${action}`)
   ta.value = lines.join('\n')
   // if current tab — update local draft for host as exact textarea content
   if(targetId === 'rulesAreaCurrent'){
@@ -325,18 +346,17 @@ async function saveSiteRules(){
       }
       remaining.push(ln)
     }
-    // build new text preserving whitespace and wrap editedText in markers for this host
+    // build new text by appending edited textarea content as-is, without
+    // wrapping in `# domain: HOST` markers — the compacted form is the
+    // canonical representation now.
     const base = remaining.join('\n')
-    // if editedText is empty or only whitespace, remove any existing block (do not create empty marker block)
     let newText = ''
     const editedTrim = editedText.split('\n').map(l=>l.trim()).filter(l=>l.length>0).join('\n')
     if(!editedTrim){
-      // just keep remaining (no block)
       newText = base
     } else {
-      const blockLines = [startMarker, ...(editedText === '' ? [] : editedText.split('\n')), endMarker]
-      if(base === '') newText = blockLines.join('\n')
-      else newText = base + '\n' + blockLines.join('\n')
+      if(base === '') newText = editedText
+      else newText = base + '\n' + editedText
     }
     const ok = await putRoutingA(newText, s)
     window.__saveInProgress = false
@@ -702,15 +722,19 @@ window.onload = async ()=>{
   if(tabGlobal) tabGlobal.addEventListener('click', ()=> showTab('global'))
 
   // Input handler for current textarea (autosave per-host)
+  let _draftSaveTimerCur = null
   if(taCur && saveBtn){
     taCur.addEventListener('input', async ()=>{
       const orig = (window.__originalDisplayed_current || '')
       const cur = taCur.value
-      try{
-        const host = await getCurrentTabHost()
-        const key = draftKeyForHost(host)
-        if(key){ const obj = {}; obj[key] = cur; storage.set(obj) }
-      }catch(e){}
+      if(_draftSaveTimerCur) clearTimeout(_draftSaveTimerCur)
+      _draftSaveTimerCur = setTimeout(async ()=>{
+        try{
+          const host = await getCurrentTabHost()
+          const key = draftKeyForHost(host)
+          if(key){ const obj = {}; obj[key] = cur; storage.set(obj) }
+        }catch(e){}
+      }, 400)
       // normalize for comparison to avoid CRLF issues
       const orig_norm = (orig || '').replace(/\r/g,'')
       const cur_norm = (cur || '').replace(/\r/g,'')
@@ -724,12 +748,16 @@ window.onload = async ()=>{
   }
 
   // Input handler for global textarea (no local draft)
+  let _draftSaveTimerGlob = null
   if(taGlob && saveBtn){
     taGlob.addEventListener('input', async ()=>{
       const orig = (window.__originalDisplayed_global || '')
       const cur = taGlob.value
-      // save global draft to local storage
-      try{ storage.set({'draft_rules_global': cur}) }catch(e){}
+      // save global draft to local storage (debounced)
+      if(_draftSaveTimerGlob) clearTimeout(_draftSaveTimerGlob)
+      _draftSaveTimerGlob = setTimeout(()=>{
+        try{ storage.set({'draft_rules_global': cur}) }catch(e){}
+      }, 400)
       const val = validateRoutingText(cur)
       const statusEl = document.getElementById('status')
       if(!val.ok){ if(statusEl) statusEl.textContent = t('validation_prefix') + val.errors.join('; '); saveBtn.disabled = true; return }

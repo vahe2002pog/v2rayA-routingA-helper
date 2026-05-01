@@ -177,7 +177,8 @@ async function initDynamicDomains(){
 }
 
 function buildPac(cfg, serverHost, dynamicDomains){
-  const scheme = 'PROXY'
+  const proxyScheme = String(cfg.proxy_scheme || 'http').toLowerCase()
+  const scheme = proxyScheme === 'socks5' ? 'SOCKS5' : (proxyScheme === 'socks4' ? 'SOCKS' : 'PROXY')
   const host = String(cfg.proxy_host).replace(/"/g,'')
   const port = parseInt(cfg.proxy_port, 10)
   const proxyStr = scheme + ' ' + host + ':' + port
@@ -280,6 +281,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse)=>{
       clean.proxy_domains = clean.proxy_domains.map(normalizeDomain).filter(Boolean)
     }
     if('proxy_host' in clean) clean.proxy_host = String(clean.proxy_host || '').trim()
+    if('proxy_scheme' in clean && !['http','socks4','socks5'].includes(String(clean.proxy_scheme).toLowerCase())){
+      clean.proxy_scheme = PROXY_DEFAULTS.proxy_scheme
+    }
     storage.set(clean, ()=>{ applyProxy().then(()=>sendResponse({ok:true})) })
     return true
   }

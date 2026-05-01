@@ -89,17 +89,18 @@ window.onload = async ()=>{
   loadProxy()
 
   if(btnSaveProxy) btnSaveProxy.onclick = async ()=>{
+    if(proxyStatus) proxyStatus.textContent = ''
     const domains = (proxyDomains.value || '')
       .split(/\r?\n/).map(s=>s.trim().toLowerCase()).filter(Boolean)
     const patch = {
       proxy_enabled: !!proxyEnabled.checked,
       proxy_host: (proxyHost.value || '192.168.1.1').trim(),
       proxy_port: parseInt(proxyPort.value, 10) || 20171,
-      proxy_scheme: proxyScheme.value || 'http',
+      proxy_scheme: proxyScheme ? (proxyScheme.value || 'http') : 'http',
       proxy_domains: domains
     }
     const r = await sendMsg({type:'PROXY_SET_CONFIG', patch})
-    if(proxyStatus) proxyStatus.textContent = (r && r.ok) ? t('proxy_saved') : ''
+    if(proxyStatus) proxyStatus.textContent = (r && r.ok) ? t('proxy_saved') : ((r && r.error) || t('save_failed'))
   }
 
   if(btnFetchPorts) btnFetchPorts.onclick = async ()=>{
@@ -113,6 +114,56 @@ window.onload = async ()=>{
     if(proxyPort) proxyPort.value = port
     if(proxyStatus) proxyStatus.textContent = (t('proxy_fetch_ok') || 'Port: ') + 'HTTP ' + port
   }
+  // Compact rules button
+  const btnCompact = document.getElementById('btnCompactRules')
+  const compactStatus = document.getElementById('compactStatus')
+  if(btnCompact) btnCompact.onclick = async ()=>{
+    if(compactStatus) compactStatus.textContent = ''
+    try{
+      const sv = await getServer()
+      const server = sv.serverUrl || 'http://192.168.1.1:2017'
+      const token = sv.token
+      const resp = await callApi(server, token, '/api/routingA', 'GET')
+      if(!resp || resp.code !== 'SUCCESS' || !resp.data){
+        const msg = resp && resp.message ? resp.message : 'no data'
+        if(compactStatus) compactStatus.textContent = t('compact_failed') + msg
+        return
+      }
+      const original = resp.data.routingA || ''
+      const result = window.compactRouting(original)
+      if(!result.changed){
+        if(compactStatus) compactStatus.textContent = t('compact_no_changes')
+        return
+      }
+      const before = result.stats.originalRules
+      const after = result.stats.compactedLines
+      const perAction = Object.keys(result.stats.perAction)
+        .map(a => `  ${a}: ${result.stats.perAction[a]}`).join('\n')
+      const tmpl = t('compact_confirm')
+      const msg = tmpl
+        .replace('{before}', String(before))
+        .replace('{after}', String(after))
+        .replace('{groups}', perAction)
+      if(!confirm(msg)) return
+      const r = await new Promise(res=>{
+        chrome.runtime.sendMessage(
+          {type:'SAVE_ROUTING', newText: result.text, serverUrl: server, token},
+          response=>{
+            if(chrome.runtime.lastError){ res({ok:false, error: chrome.runtime.lastError.message}); return }
+            res(response)
+          }
+        )
+      })
+      if(r && r.ok){
+        if(compactStatus) compactStatus.textContent = t('compact_done')
+      } else {
+        if(compactStatus) compactStatus.textContent = t('compact_failed') + ((r && r.error) || 'unknown')
+      }
+    }catch(e){
+      if(compactStatus) compactStatus.textContent = t('compact_failed') + (e.message || e)
+    }
+  }
+
   // Language picker
   const langBtns = document.querySelectorAll('.lang-btn')
   function setActiveLang(lang){

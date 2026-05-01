@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>compactRouting tests</title>
+  <style>
+    body { font-family: monospace; padding: 12px; }
+    .case { border: 1px solid #ccc; margin: 8px 0; padding: 8px; }
+    .case h3 { margin: 0 0 6px 0; }
+    pre { background: #f6f6f6; padding: 6px; white-space: pre-wrap; }
+    .pass { color: green; }
+    .fail { color: red; font-weight: bold; }
+    textarea { width: 100%; height: 120px; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h2>compactRouting test cases</h2>
+  <div id="cases"></div>
+
+  <hr>
+  <h2>Manual playground</h2>
+  <textarea id="manual" placeholder="Paste a RoutingA config here"></textarea>
+  <button id="btnRun">Compact</button>
+  <pre id="out"></pre>
+
+  <script src="compact.js"></script>
+  <script>
+    const cases = [
+      { name: 'empty input', input: '' },
+      { name: 'only comments (no blocks) — untouched', input: '# header\n# another comment\n' },
+      { name: 'no markers — rules outside blocks left alone', input:
+        'domain(a.com)->proxy\n' +
+        'domain(b.com)->proxy\n' +
+        'ip(8.8.8.8)->direct\n'
+      },
+      { name: 'single block collapsed and markers removed', input:
+        '# domain: chatgpt.com\n' +
+        'domain(chatgpt.com)->proxy\n' +
+        'domain(chat.openai.com)->proxy\n' +
+        '# end domain: chatgpt.com\n'
+      },
+      { name: 'multiple blocks, mixed with loose rules', input:
+        'domain(loose.example)->proxy\n' +
+        '# domain: chatgpt.com\n' +
+        'domain(chatgpt.com)->proxy\n' +
+        'domain(chat.openai.com)->proxy\n' +
+        '# end domain: chatgpt.com\n' +
+        '# domain: github.com\n' +
+        'domain(github.com)->proxy\n' +
+        'domain(api.github.com)->direct\n' +
+        '# end domain: github.com\n' +
+        'ip(1.1.1.1)->direct\n'
+      },
+      { name: 'block already compacted (idempotent)', input:
+        '# domain: chatgpt.com\n' +
+        'domain(chatgpt.com, chat.openai.com)->proxy\n' +
+        '# end domain: chatgpt.com\n'
+      },
+      { name: 'duplicates inside one block', input:
+        '# domain: foo.com\n' +
+        'domain(foo.com)->proxy\n' +
+        'domain(FOO.com)->proxy\n' +
+        'domain(bar.foo.com)->proxy\n' +
+        'domain(foo.com)->proxy\n' +
+        '# end domain: foo.com\n'
+      },
+      { name: 'block with ip(...) and prefixed tokens — preserved as-is, simple ones merged', input:
+        '# domain: site.io\n' +
+        'domain(site.io)->proxy\n' +
+        'ip(1.2.3.4)->direct\n' +
+        'domain(geosite:private)->direct\n' +
+        'domain(api.site.io)->proxy\n' +
+        '# end domain: site.io\n'
+      },
+      { name: 'block without matching end marker — left alone', input:
+        '# domain: orphan.com\n' +
+        'domain(orphan.com)->proxy\n' +
+        'domain(other.com)->proxy\n'
+      },
+      { name: 'comment inside block preserved before compacted line', input:
+        '# domain: x.com\n' +
+        '# note: temporary\n' +
+        'domain(x.com)->proxy\n' +
+        'domain(y.x.com)->proxy\n' +
+        '# end domain: x.com\n'
+      },
+    ]
+
+    function escape(s){
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    }
+    function render(){
+      const root = document.getElementById('cases')
+      for(const c of cases){
+        const r = window.compactRouting(c.input)
+        const div = document.createElement('div')
+        div.className = 'case'
+        const summary = `rules=${r.stats.originalRules} compactedLines=${r.stats.compactedLines} blocks=${r.stats.blocksProcessed} changed=${r.changed}`
+        div.innerHTML = `<h3>${escape(c.name)}</h3>
+          <div><b>input:</b><pre>${escape(c.input)}</pre></div>
+          <div><b>output:</b><pre>${escape(r.text)}</pre></div>
+          <div><b>stats:</b> ${escape(summary)} perAction=${escape(JSON.stringify(r.stats.perAction))}</div>`
+        root.appendChild(div)
+      }
+      // idempotence
+      for(const c of cases){
+        const a = window.compactRouting(c.input).text
+        const b = window.compactRouting(a).text
+        const div = document.createElement('div')
+        const ok = (a === b)
+        div.className = ok ? 'pass' : 'fail'
+        div.textContent = `idempotent[${c.name}]: ` + (ok ? 'PASS' : 'FAIL')
+        document.getElementById('cases').appendChild(div)
+      }
+    }
+    document.getElementById('btnRun').onclick = ()=>{
+      const r = window.compactRouting(document.getElementById('manual').value)
+      document.getElementById('out').textContent =
+        '--- output ---\n' + r.text +
+        '\n\n--- stats ---\n' + JSON.stringify(r.stats, null, 2) +
+        '\nchanged=' + r.changed
+    }
+    render()
+  </script>
+</body>
+</html>

@@ -88,6 +88,12 @@ const i18n = {
     proxy_hint_disabled: 'Browser proxy is disabled in settings',
     proxy_via: 'via',
     proxy_no_ports: 'No inbound ports available',
+    // compact rules
+    compact_rules: 'Compact rules',
+    compact_confirm: 'Compact routing rules?\n\nBefore: {before} simple domain rule(s)\nAfter:  {after} compacted line(s)\n\nDomains per action:\n{groups}\n\nApply and restart core?',
+    compact_done: 'Rules compacted and saved',
+    compact_failed: 'Compact failed: ',
+    compact_no_changes: 'Nothing to compact',
   },
   ru: {
     // settings
@@ -178,6 +184,12 @@ const i18n = {
     proxy_hint_disabled: 'Прокси браузера отключён в настройках',
     proxy_via: 'через',
     proxy_no_ports: 'Нет доступных портов',
+    // compact rules
+    compact_rules: 'Сжать правила',
+    compact_confirm: 'Сжать правила маршрутизации?\n\nДо:    {before} простых domain-правил\nПосле: {after} сжатых строк\n\nДоменов по действию:\n{groups}\n\nПрименить и перезапустить ядро?',
+    compact_done: 'Правила сжаты и сохранены',
+    compact_failed: 'Ошибка сжатия: ',
+    compact_no_changes: 'Сжимать нечего',
   }
 }
 

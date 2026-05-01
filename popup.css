@@ -355,3 +355,114 @@ textarea {
 .switch input:checked + .slider:before {
     transform: translateX(18px);
 }
+
+/* Compact settings page */
+.settings-page {
+    padding: 8px 10px;
+}
+
+.hidden {
+    display: none;
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.settings-title,
+.settings-subtitle {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.2;
+}
+
+.settings-subtitle {
+    margin-bottom: 4px;
+}
+
+.settings-section {
+    margin: 4px 0;
+}
+
+.settings-rule {
+    margin: 7px 0;
+    border: 0;
+    border-top: 1px solid #eee;
+}
+
+.settings-input,
+.settings-select,
+.settings-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 2px 0;
+    padding: 6px 7px;
+    border-radius: 4px;
+    border: 1px solid #e6e6e6;
+    background: #fff;
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.settings-select {
+    height: 29px;
+}
+
+.settings-textarea {
+    min-height: 58px;
+    resize: vertical;
+}
+
+.settings-wide-btn {
+    width: 100%;
+    margin: 4px 0;
+    padding: 6px 8px;
+    white-space: nowrap;
+}
+
+.settings-lang-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 3px;
+}
+
+.settings-lang-btn {
+    width: auto;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 0;
+    padding: 5px 8px;
+}
+
+.settings-flag {
+    width: 20px;
+    height: 14px;
+    flex: 0 0 auto;
+}
+
+.settings-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 3px 0;
+}
+
+.settings-check input {
+    width: auto;
+    margin: 0;
+    padding: 0;
+}
+
+.settings-proxy-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 68px 82px;
+    gap: 6px;
+    align-items: end;
+    margin: 3px 0;
+}
